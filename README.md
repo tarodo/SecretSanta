@@ -7,4 +7,7 @@
 1. `TELEGRAM_TOKEN` - токен от бота. Создать бота у [BotFather](https://t.me/botfather)
 
 ## Run
-`python main.py`
+```
+python manage.py migrate
+python manage.py bot
+```
