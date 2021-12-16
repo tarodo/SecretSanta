@@ -1,18 +1,13 @@
 import logging
 import os
+from random import randint
 
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update
-from telegram.ext import (
-    Updater,
-    CommandHandler,
-    MessageHandler,
-    Filters,
-    ConversationHandler,
-)
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram.ext import ConversationHandler
 from telegram.utils.request import Request
 from telegram import Bot
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
 load_dotenv()
@@ -30,8 +25,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-GAME, GAME_TITLE, COST, COST_LIMIT, REG_DATE, GIFTS_DATE, CREATE_GAME, CHECK_CODE = range(8)
+(
+    GAME,
+    GAME_TITLE,
+    COST,
+    COST_LIMIT,
+    REG_DATE,
+    GIFTS_DATE,
+    CREATE_GAME,
+    CHECK_CODE,
+    PLAYER_NAME,
+    PLAYER_EMAIL,
+    PLAYER_PHONE,
+    PLAYER_VISHLIST,
+    PLAYER_LETTER,
+    REG_PLAYER,
+) = range(14)
 
 def chunks_generators(buttons, chunks_number):
     for button in range(0, len(buttons), chunks_number):
@@ -76,10 +85,31 @@ def choose_game(update, context):
 
 def check_code(update, context):
     user = update.message.from_user
-    update.message.reply_text("Такая игра не найдена")
-    text, markup = get_menu(user)
-    update.message.reply_text(text, reply_markup=markup)
-    return GAME
+    user_message = update.message.text
+    if int(user_message) == context.user_data.get("game_code"):
+        text = "Замечательно, ты собираешься участвовать в игре"
+        update.message.reply_text(text)
+        game_params = context.user_data.get("game_params")
+        game_description = f"""
+        создатель игры: {game_params["user_name"]}
+        название игры: {game_params["game_title"]}
+        ограничение стоимости: {game_params["cost"]}
+        период регистрации: {game_params["reg_date"]}
+        дата отправки подарков: {game_params["gifts_date"]}
+        """
+        update.message.reply_text(game_description)
+        user_first_name = user.first_name or ""
+        buttons = [user_first_name]
+        markup = keyboard_maker(buttons, 1)
+        update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
+        update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
+        return PLAYER_NAME
+    else:
+        user = update.message.from_user
+        update.message.reply_text("Такая игра не найдена")
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
 
 
 def get_game_title(update, context):
@@ -146,17 +176,96 @@ def create_game(update, context):
     user_message = update.message.text
     if user_message == "Продолжить":
         user = update.message.from_user
+        game_code = randint(100000, 1000000)
+        context.user_data["game_code"] = game_code
+        save_game(update, context)
         text = "Отлично, Тайный Санта уже готовится к раздаче подарков!"
         update.message.reply_text(text)
         update.message.reply_text("Перешлите своим друзьям текст который находится ниже")
-        text = "Приглашаю вас присоединиться к игре Тайный Санта. Приходи на бот @SecretSanta нажимай присоединиться к игре, введи код 3648432, и следуй инструкции бота"
-        update.message.reply_text(text)
-        return COST_LIMIT
+        markup = get_menu(user)[1]
+        text = f"Приглашаю вас присоединиться к игре Тайный Санта. Приходи на бот @SecretSanta нажимай присоединиться к игре, введи код {game_code}, и следуй инструкции бота"
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
     elif user_message == "Вернуться в меню":
         user = update.message.from_user
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
+
+
+def save_game(update, context):
+    user = update.message.from_user
+    game_params = {
+        "game_title": context.user_data.get("game_title"), #str
+        "cost_limit": context.user_data.get("cost_limit"), #bool
+        "cost": context.user_data.get("cost"), #str
+        "reg_date": context.user_data.get("reg_date"),
+        "gifts_date": context.user_data.get("gifts_date"),
+        "game_code": context.user_data.get("game_code"), #int
+        "chat-id": update.message.chat_id, #int
+        "user_name": user.username #str
+    }
+    context.user_data["game_params"] = game_params
+
+
+def get_player_name(update, context):
+    user_message = update.message.text
+    context.user_data["player_name"] = user_message
+    update.message.reply_text("Введите свою электронную почту")
+    return PLAYER_EMAIL
+
+
+def get_player_email(update, context):
+    user_message = update.message.text
+    context.user_data["player_email"] = user_message
+    contact_button = KeyboardButton('Отправить мой телефон',
+                                    request_contact=True)
+    my_keyboard = ReplyKeyboardMarkup(
+        [[contact_button]], resize_keyboard=True, one_time_keyboard=True)
+    update.message.reply_text('нажмите кнопку "Отправить мой телефон"', reply_markup=my_keyboard)
+    return PLAYER_PHONE
+
+
+def get_player_phone(update, context):
+    context.user_data["player_phone"] = update.message.contact['phone_number']
+    text = "Санта хочет чтобы 🎁 вам понравится. Напишите ваши интересы или вишлист."
+    update.message.reply_text(text)
+    return PLAYER_VISHLIST
+
+
+def get_player_vishlist(update, context):
+    user_message = update.message.text
+    context.user_data["player_vishlist"] = user_message
+    text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+    update.message.reply_text(text)
+    return PLAYER_LETTER
+
+
+def get_player_letter(update, context):
+    user_message = update.message.text
+    context.user_data["player_letter"] = user_message
+    save_player(update, context)
+    text = """ 
+    31.12.2021 мы проведем жеребьевку и ты 
+    узнаешь имя и контакты своего тайного друга. 
+    Ему и нужно будет подарить подарок!
+    """
+    update.message.reply_text("Превосходно, ты в игре!")
+    update.message.reply_text(text)
+
+
+def save_player(update, context):
+    user = update.message.from_user
+    player_params = {
+        "player_name": context.user_data.get("player_name"), #str
+        "player_email": context.user_data.get("player_email"),
+        "player_phone": context.user_data.get("player_phone"),
+        "player_vishlist": context.user_data.get("player_vishlist"), #str
+        "player_letter": context.user_data.get("player_letter"),
+        "player_chat-id": update.message.chat_id, #int
+        "player_user_name": user.username #str
+    }
+    context.user_data["player_params"] = player_params
 
 
 def get_menu(user):
@@ -198,6 +307,12 @@ class Command(BaseCommand):
                 GIFTS_DATE: [MessageHandler(Filters.text, get_gifts_date)],
                 CREATE_GAME: [MessageHandler(Filters.text, create_game)],
                 CHECK_CODE: [MessageHandler(Filters.text, check_code)],
+                PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
+                PLAYER_EMAIL: [MessageHandler(Filters.text, get_player_email)],
+                PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
+                               MessageHandler(Filters.text, get_player_phone)],
+                PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
+                PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
