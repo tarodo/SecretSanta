@@ -12,6 +12,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
 from bot.models import Game, GameUser, Wishlist
+from bot.management.commands.get_items import get_items
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -43,7 +44,8 @@ logger = logging.getLogger(__name__)
     PLAYER_VISHLIST,
     PLAYER_LETTER,
     REG_PLAYER,
-) = range(14)
+    SHOW_ITEMS,
+) = range(15)
 
 def chunks_generators(buttons, chunks_number):
     for button in range(0, len(buttons), chunks_number):
@@ -245,13 +247,40 @@ def get_player_phone(update, context):
 
 def get_player_vishlist(update, context):
     user_message = update.message.text
+    context.user_data["player_vishlist"] = user_message
     if user_message in context.user_data.get("vishlist_buttons"):
-        pass
+        text = "У меня есть несколько подарков из этой категории"
+        buttons = ["Показать", "Пропустить"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
+        return SHOW_ITEMS
     else:
-        context.user_data["player_vishlist"] = user_message
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
         update.message.reply_text(text)
         return PLAYER_LETTER
+
+
+def show_items(update, context):
+    user_message = update.message.text
+    if user_message == "Пропустить":
+        text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+        update.message.reply_text(text)
+        return PLAYER_LETTER
+    elif user_message == "Показать" or "Показать ещё":
+        category = context.user_data.get("player_vishlist")
+        items = get_items(category)
+        item_qty = len(items)
+        buttons = ["Показать ещё", "Пропустить"]
+        caption = items[1]['name']
+        markup = keyboard_maker(buttons, 2)
+        bot.send_photo(
+            chat_id=update.message.chat_id,
+            photo=items[1]['image'],
+            caption=caption,
+            parse_mode="HTML",
+        )
+        text = f"Цена: {items[1]['price']}"
+        update.message.reply_text(text, reply_markup=markup)
 
 
 def get_player_letter(update, context):
@@ -362,6 +391,7 @@ class Command(BaseCommand):
                 PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
+                SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
