@@ -229,7 +229,7 @@ def get_player_email(update, context):
 def get_player_phone(update, context):
     context.user_data["player_phone"] = update.message.contact['phone_number']
     text = "Санта хочет чтобы 🎁 вам понравится. Напишите ваши интересы или вишлист."
-    update.message.reply_text(text)
+    update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
     return PLAYER_VISHLIST
 
 
@@ -244,24 +244,50 @@ def get_player_vishlist(update, context):
 def get_player_letter(update, context):
     user_message = update.message.text
     context.user_data["player_letter"] = user_message
-    save_player(update, context)
-    text = """ 
-    31.12.2021 мы проведем жеребьевку и ты 
-    узнаешь имя и контакты своего тайного друга. 
-    Ему и нужно будет подарить подарок!
-    """
-    update.message.reply_text("Превосходно, ты в игре!")
+    text = f"""Ваши данные:
+            Название игры: {context.user_data.get("game_title")}
+            Имя: {context.user_data.get("player_name")} 
+            Майл: {context.user_data.get("player_email")}
+            Телефон: {context.user_data.get("player_phone")}
+            Вишлист: {context.user_data.get("player_vishlist")}
+            Письмо Санте: {context.user_data.get("player_letter")}"""
     update.message.reply_text(text)
+    buttons = ["Продолжить", "Вернуться в меню"]
+    markup = keyboard_maker(buttons, 2)
+    update.message.reply_text("Если всё верно жмите продолжить",
+                              reply_markup=markup)
+    return REG_PLAYER
+
+
+def reg_player(update, context):
+    user_message = update.message.text
+    if user_message == "Продолжить":
+        user = update.message.from_user
+        save_player(update, context)
+        update.message.reply_text("Превосходно, ты в игре!")
+        text = f"""
+        31.12.2021 мы проведем жеребьевку и ты
+        узнаешь имя и контакты своего тайного друга.
+        Ему и нужно будет подарить подарок!
+        """
+        markup = get_menu(user)[1]
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
+    elif user_message == "Вернуться в меню":
+        user = update.message.from_user
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
 
 
 def save_player(update, context):
     user = update.message.from_user
     player_params = {
         "player_name": context.user_data.get("player_name"), #str
-        "player_email": context.user_data.get("player_email"),
-        "player_phone": context.user_data.get("player_phone"),
+        "player_email": context.user_data.get("player_email"), #str
+        "player_phone": context.user_data.get("player_phone"), #str
         "player_vishlist": context.user_data.get("player_vishlist"), #str
-        "player_letter": context.user_data.get("player_letter"),
+        "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
         "player_user_name": user.username #str
     }
@@ -294,7 +320,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         updater = Updater(token=TELEGRAM_TOKEN)
-
         dispatcher = updater.dispatcher
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
@@ -313,6 +338,7 @@ class Command(BaseCommand):
                                MessageHandler(Filters.text, get_player_phone)],
                 PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
+                REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
