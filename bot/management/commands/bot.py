@@ -11,7 +11,7 @@ from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
-from bot.models import Game, GameUser
+from bot.models import Game, GameUser, Wishlist
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -89,16 +89,15 @@ def choose_game(update, context):
 def check_code(update, context):
     user = update.message.from_user
     user_message = update.message.text
-    if int(user_message) == context.user_data.get("game_code"):
+    game = Game.objects.get(code=int(user_message))
+    if game:
         text = "Замечательно, ты собираешься участвовать в игре"
         update.message.reply_text(text)
-        game_params = context.user_data.get("game_params")
         game_description = f"""
-        создатель игры: {game_params["user_name"]}
-        название игры: {game_params["game_title"]}
-        ограничение стоимости: {game_params["cost"]}
-        период регистрации: {game_params["reg_date"]}
-        дата отправки подарков: {game_params["gifts_date"]}
+        название игры: {game.name}
+        ограничение стоимости: {game.cost_limit}
+        период регистрации: {game.reg_finish}
+        дата отправки подарков: {game.delivery}
         """
         update.message.reply_text(game_description)
         user_first_name = user.first_name or ""
@@ -222,34 +221,37 @@ def save_game(update, context):
 def get_player_name(update, context):
     user_message = update.message.text
     context.user_data["player_name"] = user_message
-    update.message.reply_text("Введите свою электронную почту")
-    return PLAYER_EMAIL
-
-
-def get_player_email(update, context):
-    user_message = update.message.text
-    context.user_data["player_email"] = user_message
     contact_button = KeyboardButton('Отправить мой телефон',
                                     request_contact=True)
     my_keyboard = ReplyKeyboardMarkup(
         [[contact_button]], resize_keyboard=True, one_time_keyboard=True)
-    update.message.reply_text('нажмите кнопку "Отправить мой телефон"', reply_markup=my_keyboard)
+    update.message.reply_text('нажмите кнопку "Отправить мой телефон"',
+                              reply_markup=my_keyboard)
     return PLAYER_PHONE
 
 
 def get_player_phone(update, context):
     context.user_data["player_phone"] = update.message.contact['phone_number']
-    text = "Санта хочет чтобы 🎁 вам понравится. Напишите ваши интересы или вишлист."
-    update.message.reply_text(text, reply_markup=ReplyKeyboardRemove())
+    vishlist_buttons = []
+    vishlists = Wishlist.objects.all()
+    for vishlist in vishlists:
+        vishlist_buttons.append(vishlist.name)
+    context.user_data["vishlist_buttons"] = vishlist_buttons
+    markup = keyboard_maker(vishlist_buttons, 2)
+    text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
+    update.message.reply_text(text, reply_markup=markup)
     return PLAYER_VISHLIST
 
 
 def get_player_vishlist(update, context):
     user_message = update.message.text
-    context.user_data["player_vishlist"] = user_message
-    text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
-    update.message.reply_text(text)
-    return PLAYER_LETTER
+    if user_message in context.user_data.get("vishlist_buttons"):
+        pass
+    else:
+        context.user_data["player_vishlist"] = user_message
+        text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+        update.message.reply_text(text)
+        return PLAYER_LETTER
 
 
 def get_player_letter(update, context):
@@ -355,7 +357,6 @@ class Command(BaseCommand):
                 CREATE_GAME: [MessageHandler(Filters.text, create_game)],
                 CHECK_CODE: [MessageHandler(Filters.text, check_code)],
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
-                PLAYER_EMAIL: [MessageHandler(Filters.text, get_player_email)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
                 PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
