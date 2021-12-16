@@ -5,11 +5,11 @@ from .models import Game, GameUser, Wishlist, Interest, Lottery
 
 class GameAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', )
-    list_display = ('name', 'cost_limit', 'reg_finish', 'delivery', )
+    list_display = ('name', "code", 'cost_limit', 'reg_finish', 'delivery', )
 
 
 class GameUserAdmin(admin.ModelAdmin):
-    list_display = ('td_id', 'name', 'phone')
+    list_display = ('td_id', "username", 'name', 'phone')
 
 
 class LotteryAdmin(admin.ModelAdmin):

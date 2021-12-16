@@ -5,6 +5,7 @@ from phonenumber_field.modelfields import PhoneNumberField
 
 class Game(models.Model):
     name = models.CharField("Название игры", max_length=200)
+    code = models.CharField("Код игры", blank=True, max_length=20)
     cost_limit = models.CharField("Лимит на стоимость", blank=True, max_length=40)
     reg_finish = models.DateTimeField("Дата окончания регистраций")
     delivery = models.DateTimeField("Дата отправления подарка")
@@ -42,6 +43,7 @@ class Interest(models.Model):
 
 class GameUser(models.Model):
     td_id = models.CharField("ID телеграмма", max_length=20)
+    username = models.CharField("Юзернейм игрока", blank=True, max_length=40)
     is_admin = models.BooleanField("Админ?", default=False)
     name = models.CharField("Имя игрока", max_length=200)
     phone = PhoneNumberField(verbose_name="Номер владельца")
