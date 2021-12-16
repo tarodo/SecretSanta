@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 from random import randint
@@ -9,6 +10,8 @@ from telegram.utils.request import Request
 from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
+
+from bot.models import Game, GameUser
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -205,6 +208,14 @@ def save_game(update, context):
         "chat-id": update.message.chat_id, #int
         "user_name": user.username #str
     }
+    logger.info(f'{game_params=}')
+    Game.objects.create(
+        name=game_params["game_title"],
+        code=game_params["game_code"],
+        cost_limit=game_params["cost"],
+        reg_finish=datetime.datetime.strptime(f"{game_params['reg_date']}", "%d.%m.%Y").date(),
+        delivery=datetime.datetime.strptime(game_params["gifts_date"], "%d.%m.%Y").date(),
+    )
     context.user_data["game_params"] = game_params
 
 
@@ -291,6 +302,17 @@ def save_player(update, context):
         "player_chat-id": update.message.chat_id, #int
         "player_user_name": user.username #str
     }
+    logger.info(f'{player_params=}')
+    game = Game.objects.filter(id=1).get()
+    player = GameUser(
+        td_id=player_params["player_chat-id"],
+        username=player_params["player_user_name"],
+        name=player_params["player_name"],
+        phone=player_params["player_phone"],
+        letter=player_params["player_letter"],
+    )
+    player.save()
+    player.game.add(game)
     context.user_data["player_params"] = player_params
 
 
