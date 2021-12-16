@@ -46,9 +46,13 @@ class GameUser(models.Model):
     name = models.CharField("Имя игрока", max_length=200)
     phone = PhoneNumberField(blank=True, verbose_name="Номер владельца")
     letter = models.TextField("Письмо Санте")
-    game = models.ForeignKey(Game, on_delete=models.CASCADE, verbose_name="Игра")
-    wishlist = models.ManyToManyField(Wishlist, verbose_name="Вишлист игрока")
-    interest = models.ManyToManyField(Interest, verbose_name="Интересы игрока")
+    game = models.ManyToManyField(Game, verbose_name="Игра")
+    wishlist = models.ManyToManyField(
+        Wishlist, verbose_name="Вишлист игрока", blank=True
+    )
+    interest = models.ManyToManyField(
+        Interest, verbose_name="Интересы игрока", blank=True
+    )
 
     def __str__(self):
         return f"{self.td_id} : {self.name}"
