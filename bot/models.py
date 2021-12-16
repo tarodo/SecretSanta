@@ -44,8 +44,8 @@ class GameUser(models.Model):
     td_id = models.CharField("ID телеграмма", max_length=20)
     is_admin = models.BooleanField("Админ?", default=False)
     name = models.CharField("Имя игрока", max_length=200)
-    phone = PhoneNumberField(blank=True, verbose_name="Номер владельца")
-    letter = models.TextField("Письмо Санте")
+    phone = PhoneNumberField(verbose_name="Номер владельца")
+    letter = models.TextField("Письмо Санте", blank=True)
     game = models.ManyToManyField(Game, verbose_name="Игра")
     wishlist = models.ManyToManyField(
         Wishlist, verbose_name="Вишлист игрока", blank=True
