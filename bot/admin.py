@@ -12,8 +12,12 @@ class GameUserAdmin(admin.ModelAdmin):
     list_display = ('td_id', 'name', 'phone')
 
 
+class LotteryAdmin(admin.ModelAdmin):
+    list_display = ('game', 'who', 'whom')
+
+
 admin.site.register(Game, GameAdmin)
 admin.site.register(GameUser, GameUserAdmin)
 admin.site.register(Wishlist)
 admin.site.register(Interest)
-admin.site.register(Lottery)
+admin.site.register(Lottery, LotteryAdmin)

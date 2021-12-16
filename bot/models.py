@@ -63,6 +63,7 @@ class GameUser(models.Model):
 
 
 class Lottery(models.Model):
+    game = models.ForeignKey(Game, on_delete=models.CASCADE, blank=True, null=True, verbose_name="Игра")
     who = models.OneToOneField(
         GameUser, on_delete=models.CASCADE, related_name="who", verbose_name="Кто дарит"
     )
