@@ -55,9 +55,11 @@ class GameUser(models.Model):
     wishlist = models.ManyToManyField(
         Wishlist, verbose_name="Вишлист игрока", blank=True
     )
+    wishlist_raw = models.CharField("Подарок от игрока", max_length=2000, blank=True)
     interest = models.ManyToManyField(
         Interest, verbose_name="Интересы игрока", blank=True
     )
+    interest_raw = models.CharField("Интерес от игрока", max_length=2000, blank=True)
 
     def __str__(self):
         return f"{self.td_id} : {self.name}"

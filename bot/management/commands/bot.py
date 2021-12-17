@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
     READ_ITEMS,
 ) = range(16)
 
+DIVIDER = ":%:"
+DIVIDER_NEW = "!!"
+DIVIDER_INTEREST = ":"
+
 
 def chunks_generators(buttons, chunks_number):
     for button in range(0, len(buttons), chunks_number):
@@ -96,6 +100,7 @@ def check_code(update, context):
     context.user_data['item_names'] = ""
     context.user_data['item_ids'] = ""
     context.user_data['interest_names'] = ""
+    context.user_data['interest_ids'] = ""
     try:
         game = Game.objects.get(code=int(user_message))
     except Game.DoesNotExist:
@@ -289,12 +294,25 @@ def get_player_phone(update, context):
     return PLAYER_INTEREST
 
 
-def add_interest(context, divider: Optional[str] = ":%:"):
-    interest = context.user_data.get("current_interest")
-    old_interests: str = context.user_data.get("interest_names")
-    if interest not in old_interests.split(divider):
-        context.user_data['interest_names'] = f"{old_interests}{divider}{interest}".lstrip(divider)
-    logger.info(f"interest_names={context.user_data['interest_names']}")
+def add_interest(context):
+    interest_name = context.user_data.get("current_interest")
+    if interest_name != "":
+        interest_id = None
+        try:
+            interest = Interest.objects.filter(name=interest_name).get()
+            interest_id = interest.id
+        except Interest.DoesNotExist:
+            pass
+        if interest_id:
+            old_ids: str = context.user_data.get("interest_ids")
+            if str(interest_id) not in old_ids.split(DIVIDER):
+                context.user_data['interest_ids'] = f"{old_ids}{DIVIDER}{interest_id}".lstrip(DIVIDER)
+            new_name = f"{interest_name}"
+        else:
+            new_name = f"{DIVIDER_NEW}{interest_name}"
+        old_interests: str = context.user_data.get("interest_names")
+        if new_name not in old_interests.split(DIVIDER):
+            context.user_data['interest_names'] = f"{old_interests}{DIVIDER}{new_name}".lstrip(DIVIDER)
 
 
 def get_player_interest(update, context):
@@ -320,7 +338,7 @@ def add_item(context, divider: Optional[str] = ":%:"):
     item_id = context.user_data.get("current_item_id")
     interest = context.user_data.get("current_interest")
     old_names: str = context.user_data.get("item_names")
-    if item_name:
+    if item_name != "":
         if item_id:
             old_ids: str = context.user_data.get("item_ids")
             if str(item_id) not in old_ids.split(divider):
@@ -330,8 +348,6 @@ def add_item(context, divider: Optional[str] = ":%:"):
             new_item_name = f"!!{interest}:{item_name}"
         if new_item_name not in old_names.split(divider):
             context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
-    logger.info(f'item_ids={context.user_data.get("item_ids")}')
-    logger.info(f'item_names={context.user_data.get("item_names")}')
 
 
 def show_items(update, context):
@@ -427,13 +443,16 @@ def read_items(update, context):
 def get_interests_for_showing(context, divider: Optional[str] = ":%:") -> str:
     """Collect interests in one row"""
     interests: str = context.user_data.get("interest_names")
-    return ", ".join(interests.split(divider))
+    return ", ".join(interests.replace("!!", "").split(divider))
 
 
 def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
     """Collect items in one row"""
     items: str = context.user_data.get("item_names")
-    items_list = [item.lstrip("!!") for item in items.split(divider)]
+    if items == "":
+        return ""
+    items = items.replace("!!", "")
+    items_list = [item for item in items.split(divider)]
     item_to_show = []
     for item in items_list:
         item_info = item.split(":")
@@ -480,13 +499,52 @@ def reg_player(update, context):
         return GAME
 
 
+def get_interest_ids(context):
+    ids: str = context.user_data.get("interest_ids")
+    if ids == "":
+        return []
+    return ids.split(DIVIDER)
+
+
+def get_wishlist_ids(context):
+    ids: str = context.user_data.get("item_ids")
+    logger.info(f'111 {ids=}')
+    if ids == "":
+        return []
+    return ids.split(DIVIDER)
+
+
+def get_interest_raw(context):
+    interests: str = context.user_data.get("interest_names")
+    raw_interests = []
+    for interest in interests.split(DIVIDER):
+        if interest.startswith(DIVIDER_NEW):
+            raw_interests.append(interest.lstrip(DIVIDER_NEW))
+    return '; '.join(raw_interests)
+
+
+def get_wishlist_raw(context):
+    items: str = context.user_data.get("item_names")
+    logger.info(f"{items=}")
+    raw_items = []
+    for item in items.split(DIVIDER):
+        if item.startswith(DIVIDER_NEW):
+            item_info = item.replace(DIVIDER_NEW, "").split(DIVIDER_INTEREST)
+            raw_items.append(f"{item_info[1]} ({item_info[0]})")
+    logger.info(f"{raw_items=}")
+    return '; '.join(raw_items)
+
+
 def save_player(update, context):
     user = update.message.from_user
     player_params = {
         "player_name": context.user_data.get("player_name"), #str
         "player_email": context.user_data.get("player_email"), #str
         "player_phone": context.user_data.get("player_phone"), #str
-        "player_wishlist": context.user_data.get("player_wishlist"), #str
+        "player_interest_ids": get_interest_ids(context),
+        "player_wishlist_ids": get_wishlist_ids(context),
+        "player_interest_raw": get_interest_raw(context),
+        "player_wishlist_raw": get_wishlist_raw(context), #str
         "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
         "player_user_name": user.username, #str
@@ -507,9 +565,25 @@ def save_player(update, context):
         name=player_params["player_name"],
         phone=player_params["player_phone"],
         letter=player_params["player_letter"],
+        interest_raw=player_params["player_interest_raw"],
+        wishlist_raw=player_params["player_wishlist_raw"],
     )
     player.save()
     player.game.add(game)
+    for interest_id in player_params["player_interest_ids"]:
+        try:
+            interest = Interest.objects.filter(id=interest_id).get()
+            player.interest.add(interest)
+        except Interest.DoesNotExist:
+            pass
+
+    for item_id in player_params["player_wishlist_ids"]:
+        try:
+            item = Wishlist.objects.filter(id=item_id).get()
+            player.wishlist.add(item)
+        except Interest.DoesNotExist:
+            pass
+
     context.user_data["player_params"] = player_params
 
 
