@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
     PLAYER_NAME,
     PLAYER_EMAIL,
     PLAYER_PHONE,
-    PLAYER_VISHLIST,
+    PLAYER_WISHLIST,
     PLAYER_LETTER,
     REG_PLAYER,
     SHOW_ITEMS,
@@ -234,21 +234,21 @@ def get_player_name(update, context):
 
 def get_player_phone(update, context):
     context.user_data["player_phone"] = update.message.contact['phone_number']
-    vishlist_buttons = []
-    vishlists = Wishlist.objects.all()
-    for vishlist in vishlists:
-        vishlist_buttons.append(vishlist.name)
-    context.user_data["vishlist_buttons"] = vishlist_buttons
-    markup = keyboard_maker(vishlist_buttons, 2)
+    wishlist_buttons = []
+    wishlists = Wishlist.objects.all()
+    for wishlist in wishlists:
+        wishlist_buttons.append(wishlist.name)
+    context.user_data["wishlist_buttons"] = wishlist_buttons
+    markup = keyboard_maker(wishlist_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
     update.message.reply_text(text, reply_markup=markup)
-    return PLAYER_VISHLIST
+    return PLAYER_WISHLIST
 
 
-def get_player_vishlist(update, context):
+def get_player_wishlist(update, context):
     user_message = update.message.text
-    context.user_data["player_vishlist"] = user_message
-    if user_message in context.user_data.get("vishlist_buttons"):
+    context.user_data["player_wishlist"] = user_message
+    if user_message in context.user_data.get("wishlist_buttons"):
         text = "У меня есть несколько подарков из этой категории"
         buttons = ["Показать", "Пропустить"]
         markup = keyboard_maker(buttons, 2)
@@ -267,7 +267,7 @@ def show_items(update, context):
         update.message.reply_text(text)
         return PLAYER_LETTER
     elif user_message == "Показать" or "Показать ещё":
-        category = context.user_data.get("player_vishlist")
+        category = context.user_data.get("player_wishlist")
         items = get_items(category)
         item_qty = len(items)
         buttons = ["Показать ещё", "Пропустить"]
@@ -291,7 +291,7 @@ def get_player_letter(update, context):
             Имя: {context.user_data.get("player_name")} 
             Майл: {context.user_data.get("player_email")}
             Телефон: {context.user_data.get("player_phone")}
-            Вишлист: {context.user_data.get("player_vishlist")}
+            Вишлист: {context.user_data.get("player_wishlist")}
             Письмо Санте: {context.user_data.get("player_letter")}"""
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
@@ -328,7 +328,7 @@ def save_player(update, context):
         "player_name": context.user_data.get("player_name"), #str
         "player_email": context.user_data.get("player_email"), #str
         "player_phone": context.user_data.get("player_phone"), #str
-        "player_vishlist": context.user_data.get("player_vishlist"), #str
+        "player_wishlist": context.user_data.get("player_wishlist"), #str
         "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
         "player_user_name": user.username #str
@@ -388,7 +388,7 @@ class Command(BaseCommand):
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
-                PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
+                PLAYER_WISHLIST: [MessageHandler(Filters.text, get_player_wishlist)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
                 SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
