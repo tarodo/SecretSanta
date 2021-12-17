@@ -1,6 +1,7 @@
 import datetime
 import logging
 import os
+import re
 from random import randint
 from typing import Optional
 
@@ -350,6 +351,20 @@ def add_item(context, divider: Optional[str] = ":%:"):
             context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
 
 
+def get_costs(context):
+    game = Game.objects.get(id=context.user_data.get("game_id"))
+    cost_limit = game.cost_limit
+    costs = re.findall(r"\d+", cost_limit)
+    if len(costs) == 2:
+        return costs[0], costs[1]
+    elif len(costs) == 1 and 'от' in cost_limit:
+        return None, costs[0]
+    elif len(costs) == 1:
+        return costs[0], None
+    else:
+        return None, None
+
+
 def show_items(update, context):
     user_message = update.message.text
     if user_message == "Закончить":
@@ -369,9 +384,20 @@ def show_items(update, context):
         return PLAYER_INTEREST
     elif user_message == "Показать" or user_message == "Показать ещё":
         category = context.user_data.get("current_interest")
+        cost_low, cost_high = get_costs(context)
         items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
-        item_qty = len(items)
+        if cost_low:
+            items = items.filter(price__gte=cost_low).all()
+        if cost_high:
+            items = items.filter(price__lte=cost_high).all()
 
+        item_qty = len(items)
+        if item_qty == 0:
+            text = f"Товары этой категории закончились, напишите свой или смените интерес."
+            buttons = ["Другой интерес", "Закончить"]
+            markup = keyboard_maker(buttons, 2)
+            update.message.reply_text(text, reply_markup=markup)
+            return READ_ITEMS
         if user_message == "Показать":
             context.user_data['user_item_shift'] = 0
         if user_message == "Показать ещё":
@@ -397,6 +423,7 @@ def show_items(update, context):
     elif user_message == "Выбрать":
         text = f"Записали '{context.user_data['current_item_name']}' в ваши пожелания"
         add_item(context)
+        context.user_data['user_item_shift'] = 0
         buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
         markup = keyboard_maker(buttons, 2)
         update.message.reply_text(text, reply_markup=markup)
