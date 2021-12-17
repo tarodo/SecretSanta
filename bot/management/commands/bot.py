@@ -91,29 +91,31 @@ def choose_game(update, context):
 def check_code(update, context):
     user = update.message.from_user
     user_message = update.message.text
-    game = Game.objects.get(code=int(user_message))
-    if game:
-        text = "Замечательно, ты собираешься участвовать в игре"
-        update.message.reply_text(text)
-        game_description = f"""
-        название игры: {game.name}
-        ограничение стоимости: {game.cost_limit}
-        период регистрации: {game.reg_finish}
-        дата отправки подарков: {game.delivery}
-        """
-        update.message.reply_text(game_description)
-        user_first_name = user.first_name or ""
-        buttons = [user_first_name]
-        markup = keyboard_maker(buttons, 1)
-        update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
-        update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
-        return PLAYER_NAME
-    else:
+    try:
+        game = Game.objects.get(code=int(user_message))
+    except Game.DoesNotExist:
         user = update.message.from_user
         update.message.reply_text("Такая игра не найдена")
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
+
+    context.user_data["game_id"] = game.id
+    text = "Замечательно, ты собираешься участвовать в игре"
+    update.message.reply_text(text)
+    game_description = f"""
+    название игры: {game.name}
+    ограничение стоимости: {game.cost_limit}
+    период регистрации: {game.reg_finish}
+    дата отправки подарков: {game.delivery}
+    """
+    update.message.reply_text(game_description)
+    user_first_name = user.first_name or ""
+    buttons = [user_first_name]
+    markup = keyboard_maker(buttons, 1)
+    update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
+    update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
+    return PLAYER_NAME
 
 
 def get_game_title(update, context):
@@ -358,10 +360,18 @@ def save_player(update, context):
         "player_wishlist": context.user_data.get("player_wishlist"), #str
         "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
-        "player_user_name": user.username #str
+        "player_user_name": user.username, #str
+        "player_game_id": context.user_data.get("game_id")
     }
     logger.info(f'{player_params=}')
-    game = Game.objects.filter(id=1).get()
+    try:
+        game = Game.objects.filter(id=player_params['player_game_id']).get()
+    except Game.DoesNotExist:
+        user = update.message.from_user
+        update.message.reply_text("Простите, что-то пошло не так, пройдите регистрацию заново.")
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
     player = GameUser(
         td_id=player_params["player_chat-id"],
         username=player_params["player_user_name"],
