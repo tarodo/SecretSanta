@@ -124,24 +124,36 @@ def check_code(update, context):
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
-
-    context.user_data["game_id"] = game.id
-    context.user_data["game_title"] = game.name
-    text = "Замечательно, ты собираешься участвовать в игре"
-    update.message.reply_text(text)
-    game_description = f"""
-    название игры: {game.name}
-    ограничение стоимости: {game.cost_limit}
-    период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
-    дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
-    """
-    update.message.reply_text(game_description)
-    user_first_name = user.first_name or ""
-    buttons = [user_first_name]
-    markup = keyboard_maker(buttons, 1)
-    update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
-    update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
-    return PLAYER_NAME
+    if GameUser.objects.filter(game__code=int(user_message)):
+        update.message.reply_text("Вы уже в игре")
+        text = f"""
+        название игры: {game.name}
+        ограничение стоимости: {game.cost_limit}
+        период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
+        дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
+        """
+        #update.message.reply_text(text)
+        markup = get_menu(user)[1]
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME 
+    else:
+        context.user_data["game_id"] = game.id
+        context.user_data["game_title"] = game.name
+        text = "Замечательно, ты собираешься участвовать в игре"
+        update.message.reply_text(text)
+        game_description = f"""
+        название игры: {game.name}
+        ограничение стоимости: {game.cost_limit}
+        период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
+        дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
+        """
+        update.message.reply_text(game_description)
+        user_first_name = user.first_name or ""
+        buttons = [user_first_name]
+        markup = keyboard_maker(buttons, 1)
+        update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
+        update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
+        return PLAYER_NAME
 
 
 def get_game_title(update, context):
