@@ -139,30 +139,66 @@ def choose_cost(update, context):
         return COST_LIMIT
     elif user_message == "Нет":
         context.user_data["cost_limit"] = False
-        text = "Введите период регистрации участников, например 'до 25.12.2021'"
+        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
         update.message.reply_text(text)
+        update.message.reply_text("Например  '25.12.2021'")
+
         return REG_DATE
 
 
 def get_cost_limit(update, context):
     user_message = update.message.text
     context.user_data["cost"] = user_message
-    text = "Введите период регистрации участников, например 'до 25.12.2021'"
+    text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
     update.message.reply_text(text)
+    update.message.reply_text("Например  '25.12.2021'")
     return REG_DATE
 
 
 def get_reg_date(update, context):
     user_message = update.message.text
-    context.user_data["reg_date"] = user_message
-    text = "Введите дата отправки подарка, например '31.12.2021'"
+    try:
+        reg_date = datetime.datetime.strptime(f"{user_message}", "%d.%m.%Y").date()
+    except ValueError:
+        update.message.reply_text("Введена не корректная дата.")
+        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
+        update.message.reply_text(text)
+        update.message.reply_text("Например  '25.12.2021'")
+        return REG_DATE
+    if reg_date <= datetime.date.today():
+        text = "У Санты сломалась машина времени 😭, пожалуйста дату из будущего😁"
+        update.message.reply_text(text)
+        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
+        update.message.reply_text(text)
+        update.message.reply_text("Например  '25.12.2021'")
+        return REG_DATE
+    context.user_data["reg_date"] = reg_date
+    text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
     update.message.reply_text(text)
+    update.message.reply_text("Например  '31.12.2021'")
     return GIFTS_DATE
 
 
 def get_gifts_date(update, context):
     user_message = update.message.text
-    context.user_data["gifts_date"] = user_message
+    try:
+        gifts_date = datetime.datetime.strptime(f"{user_message}",
+                                              "%d.%m.%Y").date()
+    except ValueError:
+        update.message.reply_text("Введена не корректная дата.")
+        text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
+        update.message.reply_text(text)
+        update.message.reply_text("Например  '31.12.2021'")
+        return GIFTS_DATE
+    if gifts_date <= context.user_data.get("reg_date"):
+        update.message.reply_text("Введена не корректная дата.")
+        text = "Она должна быть позже даты регистрации"
+        update.message.reply_text(text)
+        text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
+        update.message.reply_text(text)
+        update.message.reply_text("Например  '31.12.2021'")
+        return GIFTS_DATE
+    context.user_data["gifts_date"] = gifts_date
     if not context.user_data.get("cost_limit"):
         context.user_data["cost"] = "без ограничений"
     text = f"""Ваша игра:
@@ -216,8 +252,8 @@ def save_game(update, context):
         name=game_params["game_title"],
         code=game_params["game_code"],
         cost_limit=game_params["cost"],
-        reg_finish=datetime.datetime.strptime(f"{game_params['reg_date']}", "%d.%m.%Y").date(),
-        delivery=datetime.datetime.strptime(game_params["gifts_date"], "%d.%m.%Y").date(),
+        reg_finish=game_params['reg_date'],
+        delivery=game_params["gifts_date"],
     )
     context.user_data["game_params"] = game_params
 
