@@ -11,7 +11,7 @@ from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
-from bot.models import Game, GameUser, Wishlist
+from bot.models import Game, GameUser, Wishlist, Interest
 from bot.management.commands.get_items import get_items
 
 load_dotenv()
@@ -234,12 +234,12 @@ def get_player_name(update, context):
 
 def get_player_phone(update, context):
     context.user_data["player_phone"] = update.message.contact['phone_number']
-    wishlist_buttons = []
-    wishlists = Wishlist.objects.all()
-    for wishlist in wishlists:
-        wishlist_buttons.append(wishlist.name)
-    context.user_data["wishlist_buttons"] = wishlist_buttons
-    markup = keyboard_maker(wishlist_buttons, 2)
+    interests_buttons = []
+    interests = Interest.objects.all()
+    for interest in interests:
+        interests_buttons.append(interest.name)
+    context.user_data["wishlist_buttons"] = interests_buttons
+    markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
     update.message.reply_text(text, reply_markup=markup)
     return PLAYER_WISHLIST
@@ -250,7 +250,7 @@ def get_player_wishlist(update, context):
     context.user_data["player_wishlist"] = user_message
     if user_message in context.user_data.get("wishlist_buttons"):
         text = "У меня есть несколько подарков из этой категории"
-        buttons = ["Показать", "Пропустить"]
+        buttons = ["Показать", "Пропустить", "Вернуться"]
         markup = keyboard_maker(buttons, 2)
         update.message.reply_text(text, reply_markup=markup)
         return SHOW_ITEMS
@@ -265,22 +265,48 @@ def show_items(update, context):
     if user_message == "Пропустить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
         update.message.reply_text(text)
+        context.user_data['user_item_id'] = None
+        context.user_data['user_item_name'] = None
         return PLAYER_LETTER
-    elif user_message == "Показать" or "Показать ещё":
+    if user_message == "Вернуться":
+        context.user_data['user_item_id'] = None
+        context.user_data['user_item_name'] = None
+        interests_buttons = context.user_data["wishlist_buttons"]
+        markup = keyboard_maker(interests_buttons, 2)
+        text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
+        update.message.reply_text(text, reply_markup=markup)
+        return PLAYER_WISHLIST
+    elif user_message == "Показать" or user_message == "Показать ещё":
         category = context.user_data.get("player_wishlist")
-        items = get_items(category)
+        items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
         item_qty = len(items)
-        buttons = ["Показать ещё", "Пропустить"]
-        caption = items[1]['name']
+
+        if user_message == "Показать":
+            context.user_data['user_item_shift'] = 0
+        if user_message == "Показать ещё":
+            if item_qty == context.user_data['user_item_shift'] + 1:
+                context.user_data['user_item_shift'] = 0
+            else:
+                context.user_data['user_item_shift'] += 1
+        shift = context.user_data['user_item_shift']
+        item = items[shift]
+        context.user_data['user_item_id'] = item.id
+        context.user_data['user_item_name'] = item.name
+        buttons = ["Показать ещё", "Выбрать", "Вернуться", "Пропустить"]
+        caption = item.name
         markup = keyboard_maker(buttons, 2)
         bot.send_photo(
             chat_id=update.message.chat_id,
-            photo=items[1]['image'],
+            photo=item.image_url,
             caption=caption,
             parse_mode="HTML",
         )
-        text = f"Цена: {items[1]['price']}"
+        text = f"Цена: {item.price}"
         update.message.reply_text(text, reply_markup=markup)
+    elif user_message == "Выбрать":
+        text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+        update.message.reply_text(text)
+        return PLAYER_LETTER
 
 
 def get_player_letter(update, context):
@@ -291,7 +317,8 @@ def get_player_letter(update, context):
             Имя: {context.user_data.get("player_name")} 
             Майл: {context.user_data.get("player_email")}
             Телефон: {context.user_data.get("player_phone")}
-            Вишлист: {context.user_data.get("player_wishlist")}
+            Интерес: {context.user_data.get("player_wishlist")}
+            Подарок: {context.user_data.get("user_item_name")}
             Письмо Санте: {context.user_data.get("player_letter")}"""
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
