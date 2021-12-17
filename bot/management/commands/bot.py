@@ -12,7 +12,6 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
 from bot.models import Game, GameUser, Wishlist, Interest
-from bot.management.commands.get_items import get_items
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -46,6 +45,7 @@ logger = logging.getLogger(__name__)
     REG_PLAYER,
     SHOW_ITEMS,
 ) = range(15)
+
 
 def chunks_generators(buttons, chunks_number):
     for button in range(0, len(buttons), chunks_number):
