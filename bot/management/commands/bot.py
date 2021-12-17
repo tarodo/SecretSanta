@@ -263,6 +263,7 @@ def save_game(update, context):
     Game.objects.create(
         name=game_params["game_title"],
         code=game_params["game_code"],
+        tg_id_owner=game_params["chat-id"],
         cost_limit=game_params["cost"],
         reg_finish=game_params['reg_date'],
         delivery=game_params["gifts_date"],
@@ -354,13 +355,15 @@ def add_item(context, divider: Optional[str] = ":%:"):
 def get_costs(context):
     game = Game.objects.get(id=context.user_data.get("game_id"))
     cost_limit = game.cost_limit
+    logger.info(f'{cost_limit=}')
     costs = re.findall(r"\d+", cost_limit)
+    logger.info(f'{costs=}')
     if len(costs) == 2:
         return costs[0], costs[1]
     elif len(costs) == 1 and 'от' in cost_limit:
-        return None, costs[0]
-    elif len(costs) == 1:
         return costs[0], None
+    elif len(costs) == 1:
+        return None, costs[0]
     else:
         return None, None
 
