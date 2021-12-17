@@ -16,8 +16,12 @@ class LotteryAdmin(admin.ModelAdmin):
     list_display = ('game', 'who', 'whom')
 
 
+class WishlistAdmin(admin.ModelAdmin):
+    list_display = ('name', 'interest', 'price')
+
+
 admin.site.register(Game, GameAdmin)
 admin.site.register(GameUser, GameUserAdmin)
-admin.site.register(Wishlist)
+admin.site.register(Wishlist, WishlistAdmin)
 admin.site.register(Interest)
 admin.site.register(Lottery, LotteryAdmin)

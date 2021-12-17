@@ -11,7 +11,7 @@ from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
-from bot.models import Game, GameUser, Wishlist
+from bot.models import Game, GameUser, Wishlist, Interest
 from bot.management.commands.get_items import get_items
 
 load_dotenv()
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
     PLAYER_NAME,
     PLAYER_EMAIL,
     PLAYER_PHONE,
-    PLAYER_VISHLIST,
+    PLAYER_WISHLIST,
     PLAYER_LETTER,
     REG_PLAYER,
     SHOW_ITEMS,
@@ -234,23 +234,23 @@ def get_player_name(update, context):
 
 def get_player_phone(update, context):
     context.user_data["player_phone"] = update.message.contact['phone_number']
-    vishlist_buttons = []
-    vishlists = Wishlist.objects.all()
-    for vishlist in vishlists:
-        vishlist_buttons.append(vishlist.name)
-    context.user_data["vishlist_buttons"] = vishlist_buttons
-    markup = keyboard_maker(vishlist_buttons, 2)
+    interests_buttons = []
+    interests = Interest.objects.all()
+    for interest in interests:
+        interests_buttons.append(interest.name)
+    context.user_data["wishlist_buttons"] = interests_buttons
+    markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
     update.message.reply_text(text, reply_markup=markup)
-    return PLAYER_VISHLIST
+    return PLAYER_WISHLIST
 
 
-def get_player_vishlist(update, context):
+def get_player_wishlist(update, context):
     user_message = update.message.text
-    context.user_data["player_vishlist"] = user_message
-    if user_message in context.user_data.get("vishlist_buttons"):
+    context.user_data["player_wishlist"] = user_message
+    if user_message in context.user_data.get("wishlist_buttons"):
         text = "У меня есть несколько подарков из этой категории"
-        buttons = ["Показать", "Пропустить"]
+        buttons = ["Показать", "Пропустить", "Вернуться"]
         markup = keyboard_maker(buttons, 2)
         update.message.reply_text(text, reply_markup=markup)
         return SHOW_ITEMS
@@ -265,22 +265,48 @@ def show_items(update, context):
     if user_message == "Пропустить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
         update.message.reply_text(text)
+        context.user_data['user_item_id'] = None
+        context.user_data['user_item_name'] = None
         return PLAYER_LETTER
-    elif user_message == "Показать" or "Показать ещё":
-        category = context.user_data.get("player_vishlist")
-        items = get_items(category)
+    if user_message == "Вернуться":
+        context.user_data['user_item_id'] = None
+        context.user_data['user_item_name'] = None
+        interests_buttons = context.user_data["wishlist_buttons"]
+        markup = keyboard_maker(interests_buttons, 2)
+        text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
+        update.message.reply_text(text, reply_markup=markup)
+        return PLAYER_WISHLIST
+    elif user_message == "Показать" or user_message == "Показать ещё":
+        category = context.user_data.get("player_wishlist")
+        items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
         item_qty = len(items)
-        buttons = ["Показать ещё", "Пропустить"]
-        caption = items[1]['name']
+
+        if user_message == "Показать":
+            context.user_data['user_item_shift'] = 0
+        if user_message == "Показать ещё":
+            if item_qty == context.user_data['user_item_shift'] + 1:
+                context.user_data['user_item_shift'] = 0
+            else:
+                context.user_data['user_item_shift'] += 1
+        shift = context.user_data['user_item_shift']
+        item = items[shift]
+        context.user_data['user_item_id'] = item.id
+        context.user_data['user_item_name'] = item.name
+        buttons = ["Показать ещё", "Выбрать", "Вернуться", "Пропустить"]
+        caption = item.name
         markup = keyboard_maker(buttons, 2)
         bot.send_photo(
             chat_id=update.message.chat_id,
-            photo=items[1]['image'],
+            photo=item.image_url,
             caption=caption,
             parse_mode="HTML",
         )
-        text = f"Цена: {items[1]['price']}"
+        text = f"Цена: {item.price}"
         update.message.reply_text(text, reply_markup=markup)
+    elif user_message == "Выбрать":
+        text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+        update.message.reply_text(text)
+        return PLAYER_LETTER
 
 
 def get_player_letter(update, context):
@@ -291,7 +317,8 @@ def get_player_letter(update, context):
             Имя: {context.user_data.get("player_name")} 
             Майл: {context.user_data.get("player_email")}
             Телефон: {context.user_data.get("player_phone")}
-            Вишлист: {context.user_data.get("player_vishlist")}
+            Интерес: {context.user_data.get("player_wishlist")}
+            Подарок: {context.user_data.get("user_item_name")}
             Письмо Санте: {context.user_data.get("player_letter")}"""
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
@@ -328,7 +355,7 @@ def save_player(update, context):
         "player_name": context.user_data.get("player_name"), #str
         "player_email": context.user_data.get("player_email"), #str
         "player_phone": context.user_data.get("player_phone"), #str
-        "player_vishlist": context.user_data.get("player_vishlist"), #str
+        "player_wishlist": context.user_data.get("player_wishlist"), #str
         "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
         "player_user_name": user.username #str
@@ -388,7 +415,7 @@ class Command(BaseCommand):
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
-                PLAYER_VISHLIST: [MessageHandler(Filters.text, get_player_vishlist)],
+                PLAYER_WISHLIST: [MessageHandler(Filters.text, get_player_wishlist)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
                 SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
