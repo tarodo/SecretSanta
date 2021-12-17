@@ -2,6 +2,7 @@ import datetime
 import logging
 import os
 from random import randint
+from typing import Optional
 
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
@@ -40,11 +41,12 @@ logger = logging.getLogger(__name__)
     PLAYER_NAME,
     PLAYER_EMAIL,
     PLAYER_PHONE,
-    PLAYER_WISHLIST,
+    PLAYER_INTEREST,
     PLAYER_LETTER,
     REG_PLAYER,
     SHOW_ITEMS,
-) = range(15)
+    READ_ITEMS,
+) = range(16)
 
 
 def chunks_generators(buttons, chunks_number):
@@ -91,6 +93,9 @@ def choose_game(update, context):
 def check_code(update, context):
     user = update.message.from_user
     user_message = update.message.text
+    context.user_data['item_names'] = ""
+    context.user_data['item_ids'] = ""
+    context.user_data['interest_names'] = ""
     try:
         game = Game.objects.get(code=int(user_message))
     except Game.DoesNotExist:
@@ -240,51 +245,81 @@ def get_player_phone(update, context):
     interests = Interest.objects.all()
     for interest in interests:
         interests_buttons.append(interest.name)
-    context.user_data["wishlist_buttons"] = interests_buttons
+    context.user_data["interests_buttons"] = interests_buttons
     markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
     update.message.reply_text(text, reply_markup=markup)
-    return PLAYER_WISHLIST
+    return PLAYER_INTEREST
 
 
-def get_player_wishlist(update, context):
+def add_interest(context, divider: Optional[str] = ":%:"):
+    interest = context.user_data.get("current_interest")
+    old_interests: str = context.user_data.get("interest_names")
+    if interest not in old_interests.split(divider):
+        context.user_data['interest_names'] = f"{old_interests}{divider}{interest}".lstrip(divider)
+    logger.info(f"interest_names={context.user_data['interest_names']}")
+
+
+def get_player_interest(update, context):
     user_message = update.message.text
-    context.user_data["player_wishlist"] = user_message
-    if user_message in context.user_data.get("wishlist_buttons"):
-        text = "У меня есть несколько подарков из этой категории"
-        buttons = ["Показать", "Пропустить", "Вернуться"]
+    context.user_data["current_interest"] = user_message
+    add_interest(context)
+    if user_message in context.user_data.get("interests_buttons"):
+        text = "У меня есть несколько подарков из этой категории. Можете написать свой вариант."
+        buttons = ["Показать", "Закончить", "Другой интерес"]
         markup = keyboard_maker(buttons, 2)
         update.message.reply_text(text, reply_markup=markup)
         return SHOW_ITEMS
     else:
-        text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
+        text = f"Напишите чего бы вы хотели получить в '{user_message}'"
         update.message.reply_text(text)
-        return PLAYER_LETTER
+        return READ_ITEMS
+
+
+def add_item(context, divider: Optional[str] = ":%:"):
+    item_name = context.user_data.get("current_item_name")
+    item_id = context.user_data.get("current_item_id")
+    interest = context.user_data.get("current_interest")
+    old_names: str = context.user_data.get("item_names")
+    if item_name:
+        if item_id:
+            old_ids: str = context.user_data.get("item_ids")
+            if str(item_id) not in old_ids.split(divider):
+                context.user_data['item_ids'] = f"{old_ids}{divider}{item_id}".lstrip(divider)
+            new_item_name = f"{interest}:{item_name}"
+        else:
+            new_item_name = f"!!{interest}:{item_name}"
+        if new_item_name not in old_names.split(divider):
+            context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
+    logger.info(f'item_ids={context.user_data.get("item_ids", "")}')
+    logger.info(f'item_names={context.user_data.get("item_names", "")}')
 
 
 def show_items(update, context):
     user_message = update.message.text
-    if user_message == "Пропустить":
+    if user_message == "Закончить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
         update.message.reply_text(text)
-        context.user_data['user_item_id'] = None
-        context.user_data['user_item_name'] = None
+        context.user_data['current_item_id'] = None
+        context.user_data['current_item_name'] = None
         return PLAYER_LETTER
-    if user_message == "Вернуться":
-        context.user_data['user_item_id'] = None
-        context.user_data['user_item_name'] = None
-        interests_buttons = context.user_data["wishlist_buttons"]
+    if user_message == "Другой интерес":
+        context.user_data['current_item_id'] = None
+        context.user_data['current_item_name'] = None
+        interests_buttons = context.user_data["interests_buttons"]
         markup = keyboard_maker(interests_buttons, 2)
         text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
         update.message.reply_text(text, reply_markup=markup)
-        return PLAYER_WISHLIST
+        return PLAYER_INTEREST
     elif user_message == "Показать" or user_message == "Показать ещё":
-        category = context.user_data.get("player_wishlist")
+        category = context.user_data.get("current_interest")
         items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
         item_qty = len(items)
 
         if user_message == "Показать":
             context.user_data['user_item_shift'] = 0
+            context.user_data['current_item_id'] = None
+            context.user_data['current_item_name'] = None
         if user_message == "Показать ещё":
             if item_qty == context.user_data['user_item_shift'] + 1:
                 context.user_data['user_item_shift'] = 0
@@ -292,9 +327,9 @@ def show_items(update, context):
                 context.user_data['user_item_shift'] += 1
         shift = context.user_data['user_item_shift']
         item = items[shift]
-        context.user_data['user_item_id'] = item.id
-        context.user_data['user_item_name'] = item.name
-        buttons = ["Показать ещё", "Выбрать", "Вернуться", "Пропустить"]
+        context.user_data['current_item_id'] = item.id
+        context.user_data['current_item_name'] = item.name
+        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
         caption = item.name
         markup = keyboard_maker(buttons, 2)
         bot.send_photo(
@@ -306,9 +341,48 @@ def show_items(update, context):
         text = f"Цена: {item.price}"
         update.message.reply_text(text, reply_markup=markup)
     elif user_message == "Выбрать":
+        text = f"Записали '{context.user_data['current_item_name']}' в ваши пожелания"
+        add_item(context)
+        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
+        return SHOW_ITEMS
+    else:
+        text = f"Записали, можете продолжать"
+        context.user_data["current_item_id"] = None
+        context.user_data["current_item_name"] = user_message
+        add_item(context)
+        buttons = ["Закончить", "Другой интерес"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
+        return READ_ITEMS
+
+
+def read_items(update, context):
+    user_message = update.message.text
+    if user_message == "Закончить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
         update.message.reply_text(text)
+        context.user_data['current_item_id'] = None
+        context.user_data['current_item_name'] = None
         return PLAYER_LETTER
+    if user_message == "Другой интерес":
+        context.user_data['current_item_id'] = None
+        context.user_data['current_item_name'] = None
+        interests_buttons = context.user_data["interests_buttons"]
+        markup = keyboard_maker(interests_buttons, 2)
+        text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
+        update.message.reply_text(text, reply_markup=markup)
+        return PLAYER_INTEREST
+
+    text = f"Записали, можете продолжать"
+    context.user_data["current_item_id"] = None
+    context.user_data["current_item_name"] = user_message
+    add_item(context)
+    buttons = ["Закончить", "Другой интерес"]
+    markup = keyboard_maker(buttons, 2)
+    update.message.reply_text(text, reply_markup=markup)
+    return READ_ITEMS
 
 
 def get_player_letter(update, context):
@@ -319,8 +393,8 @@ def get_player_letter(update, context):
             Имя: {context.user_data.get("player_name")} 
             Майл: {context.user_data.get("player_email")}
             Телефон: {context.user_data.get("player_phone")}
-            Интерес: {context.user_data.get("player_wishlist")}
-            Подарок: {context.user_data.get("user_item_name")}
+            Интерес: {context.user_data.get("current_interest")}
+            Подарок: {context.user_data.get("current_item_name")}
             Письмо Санте: {context.user_data.get("player_letter")}"""
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
@@ -425,10 +499,11 @@ class Command(BaseCommand):
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
-                PLAYER_WISHLIST: [MessageHandler(Filters.text, get_player_wishlist)],
+                PLAYER_INTEREST: [MessageHandler(Filters.text, get_player_interest)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
                 SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
+                READ_ITEMS: [MessageHandler(Filters.text, read_items)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
