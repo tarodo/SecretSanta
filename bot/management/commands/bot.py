@@ -72,9 +72,9 @@ def start(update, context):
     text = f"""Привет, {user.first_name}!
         Организуй тайный обмен подарками, 
         запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре"]
+    buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
     caption = "Хоу-хоу-хоу 🎅"
-    markup = keyboard_maker(buttons, 1)
+    markup = keyboard_maker(buttons, 2)
     bot.send_photo(
         chat_id=update.message.chat_id,
         photo="https://d298hcpblme28l.cloudfront.net/products/72dee529da636fedbb8bce04f204f75d_resize.jpg",
@@ -93,6 +93,20 @@ def choose_game(update, context):
     elif user_message == "Присоединиться к игре":
         update.message.reply_text("Введите код игры")
         return CHECK_CODE
+    elif user_message == "Мои игры":
+        games = Game.objects.filter(tg_id_owner=update.message.chat_id).all()
+        if len(games) == 0:
+            update.message.reply_text("У Вас пока нет игр, чтобы поадминить")
+        for game in games:
+            update.message.reply_text(f"Игра: {game.name}\n"
+                                      f"ограничение стоимости: {game.cost_limit}\n"
+                                      f"период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                      f"дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}")
+        text = f"Ничего пока с этим сделать нельзя :("
+        buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
 
 
 def check_code(update, context):
@@ -118,8 +132,8 @@ def check_code(update, context):
     game_description = f"""
     название игры: {game.name}
     ограничение стоимости: {game.cost_limit}
-    период регистрации: {game.reg_finish}
-    дата отправки подарков: {game.delivery}
+    период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
+    дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
     """
     update.message.reply_text(game_description)
     user_first_name = user.first_name or ""
@@ -146,7 +160,7 @@ def choose_cost(update, context):
         context.user_data["cost_limit"] = True
         buttons = ["до 500 рублей", "500-1000 рублей", "1000-2000 рублей"]
         markup = keyboard_maker(buttons, 1)
-        text = "Выберите диапазон цен или введите свой, например '3000-7000 рублей'"
+        text = "Выберите диапазон цен или введите свой, например '3000-7000 рублей'/'до 1000'/'от 10000'"
         update.message.reply_text(text, reply_markup=markup)
         return COST_LIMIT
     elif user_message == "Нет":
