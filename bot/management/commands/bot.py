@@ -100,6 +100,7 @@ def check_code(update, context):
         update.message.reply_text(text, reply_markup=markup)
         return GAME
 
+    context.user_data["game_id"] = game.id
     text = "Замечательно, ты собираешься участвовать в игре"
     update.message.reply_text(text)
     game_description = f"""
@@ -359,10 +360,18 @@ def save_player(update, context):
         "player_wishlist": context.user_data.get("player_wishlist"), #str
         "player_letter": context.user_data.get("player_letter"), #str
         "player_chat-id": update.message.chat_id, #int
-        "player_user_name": user.username #str
+        "player_user_name": user.username, #str
+        "player_game_id": context.user_data.get("game_id")
     }
     logger.info(f'{player_params=}')
-    game = Game.objects.filter(id=1).get()
+    try:
+        game = Game.objects.filter(id=player_params['player_game_id']).get()
+    except Game.DoesNotExist:
+        user = update.message.from_user
+        update.message.reply_text("Простите, что-то пошло не так, пройдите регистрацию заново.")
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
     player = GameUser(
         td_id=player_params["player_chat-id"],
         username=player_params["player_user_name"],
