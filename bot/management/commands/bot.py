@@ -365,6 +365,13 @@ def get_costs(context):
         return None, None
 
 
+def get_wishlist_ids(context):
+    ids: str = context.user_data.get("item_ids")
+    if ids == "":
+        return []
+    return ids.split(DIVIDER)
+
+
 def show_items(update, context):
     user_message = update.message.text
     if user_message == "Закончить":
@@ -390,6 +397,10 @@ def show_items(update, context):
             items = items.filter(price__gte=cost_low).all()
         if cost_high:
             items = items.filter(price__lte=cost_high).all()
+
+        existed_id = get_wishlist_ids(context)
+        if existed_id:
+            items = items.exclude(id__in=existed_id).all()
 
         item_qty = len(items)
         if item_qty == 0:
@@ -528,14 +539,6 @@ def reg_player(update, context):
 
 def get_interest_ids(context):
     ids: str = context.user_data.get("interest_ids")
-    if ids == "":
-        return []
-    return ids.split(DIVIDER)
-
-
-def get_wishlist_ids(context):
-    ids: str = context.user_data.get("item_ids")
-    logger.info(f'111 {ids=}')
     if ids == "":
         return []
     return ids.split(DIVIDER)
