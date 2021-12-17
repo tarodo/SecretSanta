@@ -19,19 +19,8 @@ class Game(models.Model):
         verbose_name_plural = "Игры"
 
 
-class Wishlist(models.Model):
-    name = models.CharField("Название подарка", max_length=100)
-
-    def __str__(self):
-        return f"{self.name}"
-
-    class Meta:
-        verbose_name = "Вишлист"
-        verbose_name_plural = "Вишлисты"
-
-
 class Interest(models.Model):
-    name = models.CharField("Зона интереса для подарка", max_length=100)
+    name = models.CharField("Категория для подарка", max_length=100)
 
     def __str__(self):
         return f"{self.name}"
@@ -39,6 +28,20 @@ class Interest(models.Model):
     class Meta:
         verbose_name = "Интерес"
         verbose_name_plural = "Интересы"
+
+
+class Wishlist(models.Model):
+    name = models.CharField("Название подарка", max_length=100)
+    interest = models.ForeignKey(Interest, on_delete=models.CASCADE, null=True, verbose_name="Категория")
+    price = models.PositiveIntegerField("Цена подарка", null=True)
+    image_url = models.CharField(blank=True, max_length=255, null=True, verbose_name='Ссылка на картинку')
+
+    def __str__(self):
+        return f"{self.name}"
+
+    class Meta:
+        verbose_name = "Вишлист"
+        verbose_name_plural = "Вишлисты"
 
 
 class GameUser(models.Model):
