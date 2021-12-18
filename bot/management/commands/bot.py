@@ -49,7 +49,8 @@ logger = logging.getLogger(__name__)
     REG_PLAYER,
     SHOW_ITEMS,
     READ_ITEMS,
-) = range(16)
+    GAME_CHANGE_NAME
+) = range(17)
 
 DIVIDER = ":%:"
 DIVIDER_NEW = "!!"
@@ -93,7 +94,11 @@ def get_menu(user):
                 Организуй тайный обмен подарками, 
                 запусти праздничное настроение!"""
     buttons = ["Создать игру", "Присоединиться к игре"]
-    if Game.objects.filter(tg_id_owner=user.id).count() > 0:
+    player = GameUser.objects.filter(td_id=user.id).first()
+    game_count = Game.objects.filter(tg_id_owner=user.id).count()
+    if player:
+        game_count = player.game.all().count()
+    if game_count:
         buttons.append("Мои игры")
     markup = keyboard_maker(buttons, 2)
     return text, markup
@@ -117,6 +122,43 @@ def start(update, context):
     return GAME
 
 
+def show_my_games(user, update):
+    games = Game.objects.filter(tg_id_owner=user.id).all()
+    _, markup = get_menu(user)
+    update.message.reply_text(f"Вы админите:", reply_markup=markup)
+    for game in games:
+        keyboard = [
+            [
+                InlineKeyboardButton("Сменить название", callback_data=f'game:{game.id}:change_name'),
+                InlineKeyboardButton("Участники", callback_data=f'game:{game.id}:players'),
+            ],
+        ]
+        reply_in = InlineKeyboardMarkup(keyboard)
+        players_count = game.players.all().count()
+        update.message.reply_text(f"Игра: {game.name}\n"
+                                  f"Ограничение стоимости: {game.cost_limit}\n"
+                                  f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                  f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
+                                  f"Количество игроков: {players_count}\n"
+                                  f"Ссылка для приглашений: {deep_link_generator(game.code)}",
+                                  reply_markup=reply_in
+                                  )
+    player = GameUser.objects.filter(td_id=user.id).first()
+    if player:
+        player_games = player.game.all()
+        _, markup = get_menu(user)
+        update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
+        for game in player_games:
+            players_count = game.players.all().count()
+            update.message.reply_text(f"Игра: {game.name}\n"
+                                      f"Ограничение стоимости: {game.cost_limit}\n"
+                                      f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                      f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
+                                      f"Количество игроков: {players_count}\n"
+                                      )
+    return GAME
+
+
 def choose_game(update, context):
     user = update.message.from_user
     user_message = update.message.text
@@ -127,20 +169,34 @@ def choose_game(update, context):
         update.message.reply_text("Введите код игры")
         return CHECK_CODE
     elif user_message == "Мои игры":
-        games = Game.objects.filter(tg_id_owner=update.message.chat_id).all()
-        if len(games) == 0:
-            update.message.reply_text("У Вас пока нет игр, чтобы поадминить")
-        for game in games:
-            update.message.reply_text(f"Игра: {game.name}\n"
-                                      f"Ограничение стоимости: {game.cost_limit}\n"
-                                      f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
-                                      f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
-                                      f"Ссылка для приглашений: "
-                                      )
-            update.message.reply_text(f"{deep_link_generator(game.code)}")
-        _, markup = get_menu(user)
-        update.message.reply_text(text="Ваши действия:", reply_markup=markup)
+        return show_my_games(user, update)
+
+
+def change_query_handler(update, context):
+    query = update.callback_query
+    query.answer()
+    _, game_id, game_state = query.data.split(":")
+    context.user_data["current_game_id"] = game_id
+    try:
+        game = Game.objects.get(id=game_id)
+    except Game.DoesNotExist:
+        text = "Простите, что-то пошло не так"
+        update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
         return GAME
+    if game_state == "change_name":
+        text = f"Введите новое название для {game.name}"
+        update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
+        return GAME_CHANGE_NAME
+
+
+def get_game_new_name(update, context):
+    user = update.message.from_user
+    new_name = update.message.text
+    game_id = context.user_data.get("current_game_id")
+    game = Game.objects.get(id=game_id)
+    game.name = new_name
+    game.save()
+    return show_my_games(user, update)
 
 
 def check_code(game_code, update, context):
@@ -310,7 +366,7 @@ def create_game(update, context):
         text = f"Приглашаю вас присоединиться к игре Тайный Санта. " \
                f"Приходи на бот @SecretSanta нажимай присоединиться к игре" \
                f", введи код {game_code}, и следуй инструкции бота\n" \
-               f"Либо поделись ссылкой: {url}"
+               f"Либо воспользуйтесь ссылкой: {url}"
         update.message.reply_text(text, reply_markup=markup)
         return GAME
     elif user_message == "Вернуться в меню":
@@ -742,7 +798,11 @@ class Command(BaseCommand):
                 CommandHandler('start', start)
             ],
             states={
-                GAME: [MessageHandler(Filters.text, choose_game)],
+                GAME: [
+                    MessageHandler(Filters.text, choose_game),
+                    CallbackQueryHandler(change_query_handler, pattern='^game:')
+                ],
+                GAME_CHANGE_NAME: [MessageHandler(Filters.text, get_game_new_name)],
                 GAME_TITLE: [MessageHandler(Filters.text, get_game_title)],
                 COST: [MessageHandler(Filters.text, choose_cost)],
                 COST_LIMIT: [MessageHandler(Filters.text, get_cost_limit)],
