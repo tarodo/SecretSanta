@@ -177,12 +177,12 @@ def check_code(game_code, update, context):
 
 def check_code_handler(update, context):
     game_code = update.message.text
-    check_code(game_code, update, context)
+    return check_code(game_code, update, context)
 
 
 def start_code(update, context):
     game_code = context.args[0]
-    check_code(game_code, update, context)
+    return check_code(game_code, update, context)
 
 
 def get_game_title(update, context):
@@ -348,6 +348,7 @@ def get_player_phone(update, context):
     interests = Interest.objects.all()
     for interest in interests:
         interests_buttons.append(interest.name)
+    logger.info(interests)
     context.user_data["interests_buttons"] = interests_buttons
     markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
@@ -376,16 +377,59 @@ def add_interest(context):
             context.user_data['interest_names'] = f"{old_interests}{DIVIDER}{new_name}".lstrip(DIVIDER)
 
 
+def show_one_item(user_message, update, context):
+    category = context.user_data.get("current_interest")
+    cost_low, cost_high = get_costs(context)
+    items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
+    if cost_low:
+        items = items.filter(price__gte=cost_low).all()
+    if cost_high:
+        items = items.filter(price__lte=cost_high).all()
+
+    existed_id = get_wishlist_ids(context)
+    if existed_id:
+        items = items.exclude(id__in=existed_id).all()
+
+    item_qty = len(items)
+    if item_qty == 0:
+        text = f"Товары этой категории закончились, напишите свой или смените интерес."
+        buttons = ["Другой интерес", "Закончить"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
+        return READ_ITEMS
+    if user_message == "Показать":
+        context.user_data['user_item_shift'] = 0
+    if user_message == "Показать ещё":
+        if item_qty == context.user_data['user_item_shift'] + 1:
+            context.user_data['user_item_shift'] = 0
+        else:
+            context.user_data['user_item_shift'] += 1
+    else:
+        context.user_data['user_item_shift'] = 0
+    shift = context.user_data['user_item_shift']
+    item = items[shift]
+    context.user_data['current_item_id'] = item.id
+    context.user_data['current_item_name'] = item.name
+    buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
+    caption = item.name
+    markup = keyboard_maker(buttons, 2)
+    bot.send_photo(
+        chat_id=update.message.chat_id,
+        photo=item.image_url,
+        caption=caption,
+        parse_mode="HTML",
+    )
+    text = f"Цена: {item.price}"
+    update.message.reply_text(text, reply_markup=markup)
+    return SHOW_ITEMS
+
+
 def get_player_interest(update, context):
     user_message = update.message.text
     context.user_data["current_interest"] = user_message
     add_interest(context)
     if user_message in context.user_data.get("interests_buttons"):
-        text = "У меня есть несколько подарков из этой категории. Можете написать свой вариант."
-        buttons = ["Показать", "Закончить", "Другой интерес"]
-        markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
-        return SHOW_ITEMS
+        return show_one_item("Показать", update, context)
     else:
         text = f"Напишите чего бы вы хотели получить в '{user_message}'"
         buttons = ["Закончить", "Другой интерес"]
@@ -452,47 +496,7 @@ def show_items(update, context):
         update.message.reply_text(text, reply_markup=markup)
         return PLAYER_INTEREST
     elif user_message == "Показать" or user_message == "Показать ещё":
-        category = context.user_data.get("current_interest")
-        cost_low, cost_high = get_costs(context)
-        items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
-        if cost_low:
-            items = items.filter(price__gte=cost_low).all()
-        if cost_high:
-            items = items.filter(price__lte=cost_high).all()
-
-        existed_id = get_wishlist_ids(context)
-        if existed_id:
-            items = items.exclude(id__in=existed_id).all()
-
-        item_qty = len(items)
-        if item_qty == 0:
-            text = f"Товары этой категории закончились, напишите свой или смените интерес."
-            buttons = ["Другой интерес", "Закончить"]
-            markup = keyboard_maker(buttons, 2)
-            update.message.reply_text(text, reply_markup=markup)
-            return READ_ITEMS
-        if user_message == "Показать":
-            context.user_data['user_item_shift'] = 0
-        if user_message == "Показать ещё":
-            if item_qty == context.user_data['user_item_shift'] + 1:
-                context.user_data['user_item_shift'] = 0
-            else:
-                context.user_data['user_item_shift'] += 1
-        shift = context.user_data['user_item_shift']
-        item = items[shift]
-        context.user_data['current_item_id'] = item.id
-        context.user_data['current_item_name'] = item.name
-        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
-        caption = item.name
-        markup = keyboard_maker(buttons, 2)
-        bot.send_photo(
-            chat_id=update.message.chat_id,
-            photo=item.image_url,
-            caption=caption,
-            parse_mode="HTML",
-        )
-        text = f"Цена: {item.price}"
-        update.message.reply_text(text, reply_markup=markup)
+        return show_one_item(user_message, update, context)
     elif user_message == "Выбрать":
         text = f"Записали '{context.user_data['current_item_name']}' в ваши пожелания"
         add_item(context)
