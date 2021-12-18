@@ -12,21 +12,21 @@ users = [
 'chatid_user_6',
 ]
 
-not_users_pair = [
+not_user_pairs = [
 ('chatid_user_2', 'chatid_user_5'),
 ('chatid_user_3', 'chatid_user_2'),
 ('chatid_user_6', 'chatid_user_3'),
 ]
 
 
-def pairup(users, not_users_pair):
+def pairup(users, not_user_pairs):
     random.shuffle(users)
     partners = deque(users)
     partners.rotate()
-    new = list(zip(users, partners))
-    if any(user in new for user in not_users_pair):
-    	return pairup(users, not_users_pair)
+    new_pairs = list(zip(users, partners))
+    if any(pair in new_pairs for pair in not_user_pairs):
+    	return pairup(users, not_user_pairs)
     else:	
-    	return new
+    	return new_pairs
 
-pprint(pairup(users, not_users_pair))
+pprint(pairup(users, not_user_pairs))
