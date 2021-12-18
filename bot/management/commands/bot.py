@@ -6,8 +6,9 @@ from random import randint
 from typing import Optional
 
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
-from telegram.ext import ConversationHandler
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardButton, \
+    InlineKeyboardMarkup, InputMediaPhoto
+from telegram.ext import ConversationHandler, CallbackQueryHandler
 from telegram.utils import helpers
 from telegram.utils.request import Request
 from telegram import Bot
@@ -377,7 +378,8 @@ def add_interest(context):
             context.user_data['interest_names'] = f"{old_interests}{DIVIDER}{new_name}".lstrip(DIVIDER)
 
 
-def show_one_item(user_message, update, context):
+def show_one_item(user_message, update, context, query=None):
+    logger.info(f'{user_message=}')
     category = context.user_data.get("current_interest")
     cost_low, cost_high = get_costs(context)
     items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
@@ -392,14 +394,16 @@ def show_one_item(user_message, update, context):
 
     item_qty = len(items)
     if item_qty == 0:
+        if query:
+            bot.deleteMessage(chat_id=update.effective_user.id, message_id=query.message.message_id)
         text = f"Товары этой категории закончились, напишите свой или смените интерес."
         buttons = ["Другой интерес", "Закончить"]
         markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
+        update.effective_user.send_message(text, reply_markup=markup)
         return READ_ITEMS
     if user_message == "Показать":
         context.user_data['user_item_shift'] = 0
-    if user_message == "Показать ещё":
+    elif user_message == "Показать еще":
         if item_qty == context.user_data['user_item_shift'] + 1:
             context.user_data['user_item_shift'] = 0
         else:
@@ -410,17 +414,28 @@ def show_one_item(user_message, update, context):
     item = items[shift]
     context.user_data['current_item_id'] = item.id
     context.user_data['current_item_name'] = item.name
-    buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
-    caption = item.name
-    markup = keyboard_maker(buttons, 2)
-    bot.send_photo(
-        chat_id=update.message.chat_id,
-        photo=item.image_url,
-        caption=caption,
-        parse_mode="HTML",
-    )
-    text = f"Цена: {item.price}"
-    update.message.reply_text(text, reply_markup=markup)
+    caption = f"{item.name}\nЦена: {item.price}"
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Like", callback_data=f'item:{item.id}:like'),
+            InlineKeyboardButton("Dislike", callback_data=f'item:{item.id}:dislike'),
+        ],
+    ]
+    reply_in = InlineKeyboardMarkup(keyboard)
+    if query:
+        query.edit_message_media(
+            media=InputMediaPhoto(item.image_url, caption=caption),
+            reply_markup=reply_in
+        )
+    else:
+        bot.send_photo(
+            chat_id=update.message.chat_id,
+            photo=item.image_url,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=reply_in
+        )
     return SHOW_ITEMS
 
 
@@ -429,6 +444,10 @@ def get_player_interest(update, context):
     context.user_data["current_interest"] = user_message
     add_interest(context)
     if user_message in context.user_data.get("interests_buttons"):
+        text = f"Выберете подарок:"
+        buttons = ["Закончить", "Другой интерес"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
         return show_one_item("Показать", update, context)
     else:
         text = f"Напишите чего бы вы хотели получить в '{user_message}'"
@@ -453,6 +472,16 @@ def add_item(context, divider: Optional[str] = ":%:"):
             new_item_name = f"!!{interest}:{item_name}"
         if new_item_name not in old_names.split(divider):
             context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
+
+
+def item_control(update, context):
+    query = update.callback_query
+    query.answer()
+    _, item_id, item_state = query.data.split(":")
+    if item_state == "like":
+        add_item(context)
+        context.user_data['user_item_shift'] = 0
+    return show_one_item("Показать еще", update, context, query)
 
 
 def get_costs(context):
@@ -497,14 +526,6 @@ def show_items(update, context):
         return PLAYER_INTEREST
     elif user_message == "Показать" or user_message == "Показать ещё":
         return show_one_item(user_message, update, context)
-    elif user_message == "Выбрать":
-        text = f"Записали '{context.user_data['current_item_name']}' в ваши пожелания"
-        add_item(context)
-        context.user_data['user_item_shift'] = 0
-        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
-        markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
-        return SHOW_ITEMS
     else:
         text = f"Записали, можете продолжать"
         context.user_data["current_item_id"] = ""
@@ -710,6 +731,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         updater = Updater(token=TELEGRAM_TOKEN)
         dispatcher = updater.dispatcher
+
         conv_handler = ConversationHandler(
             entry_points=[
                 CommandHandler('start', start_code, Filters.regex(r'\d+')),
@@ -730,7 +752,10 @@ class Command(BaseCommand):
                 PLAYER_INTEREST: [MessageHandler(Filters.text, get_player_interest)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
-                SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
+                SHOW_ITEMS: [
+                    MessageHandler(Filters.text, show_items),
+                    CallbackQueryHandler(item_control, pattern='^item:')
+                ],
                 READ_ITEMS: [MessageHandler(Filters.text, read_items)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
