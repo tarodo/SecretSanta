@@ -6,8 +6,10 @@ from random import randint
 from typing import Optional
 
 from dotenv import load_dotenv
-from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
-from telegram.ext import ConversationHandler
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardButton, \
+    InlineKeyboardMarkup, InputMediaPhoto
+from telegram.ext import ConversationHandler, CallbackQueryHandler
+from telegram.utils import helpers
 from telegram.utils.request import Request
 from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
@@ -47,8 +49,9 @@ logger = logging.getLogger(__name__)
     REG_PLAYER,
     SHOW_ITEMS,
     READ_ITEMS,
-    ADD_TO_GAME
-) = range(17)
+    ADD_TO_GAME,
+    GAME_CHANGE_NAME
+) = range(18)
 
 DIVIDER = ":%:"
 DIVIDER_NEW = "!!"
@@ -95,14 +98,29 @@ def send_santa_massage(game_code):
         bot.send_message(chat_id=user_1, text=text)
 
 
+def get_menu(user):
+    text = f"""Привет, {user.first_name}!
+                Организуй тайный обмен подарками, 
+                запусти праздничное настроение!"""
+    buttons = ["Создать игру", "Присоединиться к игре"]
+    player = GameUser.objects.filter(td_id=user.id).first()
+    game_count = Game.objects.filter(tg_id_owner=user.id).count()
+    if player:
+        game_count = player.game.all().count()
+    if game_count:
+        buttons.append("Мои игры")
+    markup = keyboard_maker(buttons, 2)
+    return text, markup
+
+
+def deep_link_generator(game_code):
+    return helpers.create_deep_linked_url(bot.username, str(game_code))
+
+
 def start(update, context):
     user = update.message.from_user
-    text = f"""Привет, {user.first_name}!
-        Организуй тайный обмен подарками, 
-        запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
+    text, markup = get_menu(user)
     caption = "Хоу-хоу-хоу 🎅"
-    markup = keyboard_maker(buttons, 2)
     bot.send_photo(
         chat_id=update.message.chat_id,
         photo="https://d298hcpblme28l.cloudfront.net/products/72dee529da636fedbb8bce04f204f75d_resize.jpg",
@@ -113,7 +131,45 @@ def start(update, context):
     return GAME
 
 
+def show_my_games(user, update):
+    games = Game.objects.filter(tg_id_owner=user.id).all()
+    _, markup = get_menu(user)
+    update.message.reply_text(f"Вы админите:", reply_markup=markup)
+    for game in games:
+        keyboard = [
+            [
+                InlineKeyboardButton("Сменить название", callback_data=f'game:{game.id}:change_name'),
+                InlineKeyboardButton("Участники", callback_data=f'game:{game.id}:players'),
+            ],
+        ]
+        reply_in = InlineKeyboardMarkup(keyboard)
+        players_count = game.players.all().count()
+        update.message.reply_text(f"Игра: {game.name}\n"
+                                  f"Ограничение стоимости: {game.cost_limit}\n"
+                                  f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                  f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
+                                  f"Количество игроков: {players_count}\n"
+                                  f"Ссылка для приглашений: {deep_link_generator(game.code)}",
+                                  reply_markup=reply_in
+                                  )
+    player = GameUser.objects.filter(td_id=user.id).first()
+    if player:
+        player_games = player.game.all()
+        _, markup = get_menu(user)
+        update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
+        for game in player_games:
+            players_count = game.players.all().count()
+            update.message.reply_text(f"Игра: {game.name}\n"
+                                      f"Ограничение стоимости: {game.cost_limit}\n"
+                                      f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                      f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
+                                      f"Количество игроков: {players_count}\n"
+                                      )
+    return GAME
+
+
 def choose_game(update, context):
+    user = update.message.from_user
     user_message = update.message.text
     if user_message == "Создать игру":
         update.message.reply_text("Напишите название вашей игры")
@@ -122,39 +178,55 @@ def choose_game(update, context):
         update.message.reply_text("Введите код игры")
         return CHECK_CODE
     elif user_message == "Мои игры":
-        games = Game.objects.filter(tg_id_owner=update.message.chat_id).all()
-        if len(games) == 0:
-            update.message.reply_text("У Вас пока нет игр, чтобы поадминить")
-        for game in games:
-            update.message.reply_text(f"Игра: {game.name}\n"
-                                      f"ограничение стоимости: {game.cost_limit}\n"
-                                      f"период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
-                                      f"дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}")
-        text = f"Ничего пока с этим сделать нельзя :("
-        buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
-        markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
+        return show_my_games(user, update)
+
+
+def change_query_handler(update, context):
+    query = update.callback_query
+    query.answer()
+    _, game_id, game_state = query.data.split(":")
+    context.user_data["current_game_id"] = game_id
+    try:
+        game = Game.objects.get(id=game_id)
+    except Game.DoesNotExist:
+        text = "Простите, что-то пошло не так"
+        update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
         return GAME
+    if game_state == "change_name":
+        text = f"Введите новое название для {game.name}"
+        update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
+        return GAME_CHANGE_NAME
 
 
-def check_code(update, context):
+def get_game_new_name(update, context):
     user = update.message.from_user
+    new_name = update.message.text
+    game_id = context.user_data.get("current_game_id")
+    game = Game.objects.get(id=game_id)
+    game.name = new_name
+    game.save()
+    return show_my_games(user, update)
+
+
+def check_code(game_code, update, context):
     user_message = update.message.text
+    user = update.message.from_user
     context.user_data['item_names'] = ""
     context.user_data['item_ids'] = ""
     context.user_data['interest_names'] = ""
     context.user_data['interest_ids'] = ""
     try:
-        game = Game.objects.get(code=int(user_message))
+        game = Game.objects.get(code=int(game_code))
     except Game.DoesNotExist:
         user = update.message.from_user
         update.message.reply_text("Такая игра не найдена")
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
-    game_user = GameUser.objects.filter(game__code=int(user_message))
-    #if GameUser.objects.filter(game__code=int(user_message)):
-    if not len(game_user):
+    game_user = GameUser.objects.filter(game__code=int(user_message),
+                                        td_id=update.message.chat_id)
+    print(game_user)
+    if game_user:
         update.message.reply_text("Вы уже в игре")
         text = f"""
         название игры: {game.name}
@@ -162,7 +234,6 @@ def check_code(update, context):
         период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
         дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
         """
-        #update.message.reply_text(text)
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
         return ADD_TO_GAME
@@ -247,6 +318,16 @@ def reg_player(update, context):
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
+
+
+def check_code_handler(update, context):
+    game_code = update.message.text
+    return check_code(game_code, update, context)
+
+
+def start_code(update, context):
+    game_code = context.args[0]
+    return check_code(game_code, update, context)
 
 
 def get_game_title(update, context):
@@ -356,7 +437,11 @@ def create_game(update, context):
         update.message.reply_text(text)
         update.message.reply_text("Перешлите своим друзьям текст который находится ниже")
         markup = get_menu(user)[1]
-        text = f"Приглашаю вас присоединиться к игре Тайный Санта. Приходи на бот @SecretSanta нажимай присоединиться к игре, введи код {game_code}, и следуй инструкции бота"
+        url = deep_link_generator(game_code)
+        text = f"Приглашаю вас присоединиться к игре Тайный Санта. " \
+               f"Приходи на бот @SecretSanta нажимай присоединиться к игре" \
+               f", введи код {game_code}, и следуй инструкции бота\n" \
+               f"Либо воспользуйтесь ссылкой: {url}"
         update.message.reply_text(text, reply_markup=markup)
         return GAME
     elif user_message == "Вернуться в меню":
@@ -408,6 +493,7 @@ def get_player_phone(update, context):
     interests = Interest.objects.all()
     for interest in interests:
         interests_buttons.append(interest.name)
+    logger.info(interests)
     context.user_data["interests_buttons"] = interests_buttons
     markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
@@ -436,16 +522,77 @@ def add_interest(context):
             context.user_data['interest_names'] = f"{old_interests}{DIVIDER}{new_name}".lstrip(DIVIDER)
 
 
+def show_one_item(user_message, update, context, query=None):
+    logger.info(f'{user_message=}')
+    category = context.user_data.get("current_interest")
+    cost_low, cost_high = get_costs(context)
+    items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
+    if cost_low:
+        items = items.filter(price__gte=cost_low).all()
+    if cost_high:
+        items = items.filter(price__lte=cost_high).all()
+
+    existed_id = get_wishlist_ids(context)
+    if existed_id:
+        items = items.exclude(id__in=existed_id).all()
+
+    item_qty = len(items)
+    if item_qty == 0:
+        if query:
+            bot.deleteMessage(chat_id=update.effective_user.id, message_id=query.message.message_id)
+        text = f"Товары этой категории закончились, напишите свой или смените интерес."
+        buttons = ["Другой интерес", "Закончить"]
+        markup = keyboard_maker(buttons, 2)
+        update.effective_user.send_message(text, reply_markup=markup)
+        return READ_ITEMS
+    if user_message == "Показать":
+        context.user_data['user_item_shift'] = 0
+    elif user_message == "Показать еще":
+        if item_qty == context.user_data['user_item_shift'] + 1:
+            context.user_data['user_item_shift'] = 0
+        else:
+            context.user_data['user_item_shift'] += 1
+    else:
+        context.user_data['user_item_shift'] = 0
+    shift = context.user_data['user_item_shift']
+    item = items[shift]
+    context.user_data['current_item_id'] = item.id
+    context.user_data['current_item_name'] = item.name
+    caption = f"{item.name}\nЦена: {item.price}"
+
+    keyboard = [
+        [
+            InlineKeyboardButton("Like", callback_data=f'item:{item.id}:like'),
+            InlineKeyboardButton("Dislike", callback_data=f'item:{item.id}:dislike'),
+        ],
+    ]
+    reply_in = InlineKeyboardMarkup(keyboard)
+    if query:
+        query.edit_message_media(
+            media=InputMediaPhoto(item.image_url, caption=caption),
+            reply_markup=reply_in
+        )
+    else:
+        bot.send_photo(
+            chat_id=update.message.chat_id,
+            photo=item.image_url,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=reply_in
+        )
+    return SHOW_ITEMS
+
+
 def get_player_interest(update, context):
     user_message = update.message.text
     context.user_data["current_interest"] = user_message
     add_interest(context)
     if user_message in context.user_data.get("interests_buttons"):
-        text = "У меня есть несколько подарков из этой категории. Можете написать свой вариант."
-        buttons = ["Показать", "Закончить", "Другой интерес"]
+        text = f"Выберете подарок:"
+        buttons = ["Закончить", "Другой интерес"]
         markup = keyboard_maker(buttons, 2)
         update.message.reply_text(text, reply_markup=markup)
-        return SHOW_ITEMS
+        return show_one_item("Показать", update, context)
     else:
         text = f"Напишите чего бы вы хотели получить в '{user_message}'"
         buttons = ["Закончить", "Другой интерес"]
@@ -469,6 +616,16 @@ def add_item(context, divider: Optional[str] = ":%:"):
             new_item_name = f"!!{interest}:{item_name}"
         if new_item_name not in old_names.split(divider):
             context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
+
+
+def item_control(update, context):
+    query = update.callback_query
+    query.answer()
+    _, item_id, item_state = query.data.split(":")
+    if item_state == "like":
+        add_item(context)
+        context.user_data['user_item_shift'] = 0
+    return show_one_item("Показать еще", update, context, query)
 
 
 def get_costs(context):
@@ -512,55 +669,7 @@ def show_items(update, context):
         update.message.reply_text(text, reply_markup=markup)
         return PLAYER_INTEREST
     elif user_message == "Показать" or user_message == "Показать ещё":
-        category = context.user_data.get("current_interest")
-        cost_low, cost_high = get_costs(context)
-        items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
-        if cost_low:
-            items = items.filter(price__gte=cost_low).all()
-        if cost_high:
-            items = items.filter(price__lte=cost_high).all()
-
-        existed_id = get_wishlist_ids(context)
-        if existed_id:
-            items = items.exclude(id__in=existed_id).all()
-
-        item_qty = len(items)
-        if item_qty == 0:
-            text = f"Товары этой категории закончились, напишите свой или смените интерес."
-            buttons = ["Другой интерес", "Закончить"]
-            markup = keyboard_maker(buttons, 2)
-            update.message.reply_text(text, reply_markup=markup)
-            return READ_ITEMS
-        if user_message == "Показать":
-            context.user_data['user_item_shift'] = 0
-        if user_message == "Показать ещё":
-            if item_qty == context.user_data['user_item_shift'] + 1:
-                context.user_data['user_item_shift'] = 0
-            else:
-                context.user_data['user_item_shift'] += 1
-        shift = context.user_data['user_item_shift']
-        item = items[shift]
-        context.user_data['current_item_id'] = item.id
-        context.user_data['current_item_name'] = item.name
-        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
-        caption = item.name
-        markup = keyboard_maker(buttons, 2)
-        bot.send_photo(
-            chat_id=update.message.chat_id,
-            photo=item.image_url,
-            caption=caption,
-            parse_mode="HTML",
-        )
-        text = f"Цена: {item.price}"
-        update.message.reply_text(text, reply_markup=markup)
-    elif user_message == "Выбрать":
-        text = f"Записали '{context.user_data['current_item_name']}' в ваши пожелания"
-        add_item(context)
-        context.user_data['user_item_shift'] = 0
-        buttons = ["Показать ещё", "Выбрать", "Другой интерес", "Закончить"]
-        markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
-        return SHOW_ITEMS
+        return show_one_item(user_message, update, context)
     else:
         text = f"Записали, можете продолжать"
         context.user_data["current_item_id"] = ""
@@ -739,15 +848,6 @@ def save_player(update, context):
     context.user_data["player_params"] = player_params
 
 
-def get_menu(user):
-    text = f"""Привет, {user.first_name}!
-                Организуй тайный обмен подарками, 
-                запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре"]
-    markup = keyboard_maker(buttons, 1)
-    return text, markup
-
-
 def cancel(update, _):
     user = update.message.from_user
     logger.info("Пользователь %s отменил разговор.", user.first_name)
@@ -766,24 +866,35 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         updater = Updater(token=TELEGRAM_TOKEN)
         dispatcher = updater.dispatcher
+
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start)],
+            entry_points=[
+                CommandHandler('start', start_code, Filters.regex(r'\d+')),
+                CommandHandler('start', start)
+            ],
             states={
-                GAME: [MessageHandler(Filters.text, choose_game)],
+                GAME: [
+                    MessageHandler(Filters.text, choose_game),
+                    CallbackQueryHandler(change_query_handler, pattern='^game:')
+                ],
+                GAME_CHANGE_NAME: [MessageHandler(Filters.text, get_game_new_name)],
                 GAME_TITLE: [MessageHandler(Filters.text, get_game_title)],
                 COST: [MessageHandler(Filters.text, choose_cost)],
                 COST_LIMIT: [MessageHandler(Filters.text, get_cost_limit)],
                 REG_DATE: [MessageHandler(Filters.text, get_reg_date)],
                 GIFTS_DATE: [MessageHandler(Filters.text, get_gifts_date)],
                 CREATE_GAME: [MessageHandler(Filters.text, create_game)],
-                CHECK_CODE: [MessageHandler(Filters.text, check_code)],
+                CHECK_CODE: [MessageHandler(Filters.text, check_code_handler)],
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
                 PLAYER_INTEREST: [MessageHandler(Filters.text, get_player_interest)],
                 PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
-                SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
+                SHOW_ITEMS: [
+                    MessageHandler(Filters.text, show_items),
+                    CallbackQueryHandler(item_control, pattern='^item:')
+                ],
                 READ_ITEMS: [MessageHandler(Filters.text, read_items)],
                 ADD_TO_GAME: [MessageHandler(Filters.text, add_user_to_game)],
             },

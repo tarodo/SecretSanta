@@ -52,7 +52,7 @@ class GameUser(models.Model):
     name = models.CharField("Имя игрока", max_length=200)
     phone = PhoneNumberField(verbose_name="Номер владельца")
     letter = models.TextField("Письмо Санте", blank=True)
-    game = models.ManyToManyField(Game, verbose_name="Игра")
+    game = models.ManyToManyField(Game, verbose_name="Игра", related_name='players')
     wishlist = models.ManyToManyField(
         Wishlist, verbose_name="Вишлист игрока", blank=True
     )

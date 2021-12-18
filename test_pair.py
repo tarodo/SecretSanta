@@ -4,13 +4,14 @@ from collections import deque
 
 
 users = [
-{'chatid_user_1': ['phone_user_1', 'username_1']},
-{'chatid_user_2': ['phone_user_2', 'username_2']},
-{'chatid_user_3': ['phone_user_3', 'username_3']},
-{'chatid_user_4': ['phone_user_4', 'username_3']},
-{'chatid_user_5': ['phone_user_5', 'username_3']},
-{'chatid_user_6': ['phone_user_6', 'username_3']},
+'chatid_user_1',
+'chatid_user_2',
+'chatid_user_3',
+'chatid_user_4',
+'chatid_user_5',
+'chatid_user_6',
 ]
+
 
 
 def get_created_pair(users=None):
@@ -20,13 +21,22 @@ def get_created_pair(users=None):
         user_pairs.append(user_pair)
     return user_pairs
 
+not_user_pairs = [
+('chatid_user_2', 'chatid_user_5'),
+('chatid_user_3', 'chatid_user_2'),
+('chatid_user_6', 'chatid_user_3'),
+]
 
-def pairup(users):
+
+
+def pairup(users, not_user_pairs):
     random.shuffle(users)
     partners = deque(users)
     partners.rotate()
-    return list(zip(users, partners))
+    new_pairs = list(zip(users, partners))
+    if any(pair in new_pairs for pair in not_user_pairs):
+    	return pairup(users, not_user_pairs)
+    else:	
+    	return new_pairs
 
-pprint(get_created_pair(users))
-print()
-pprint(pairup(users))
+pprint(pairup(users, not_user_pairs))
