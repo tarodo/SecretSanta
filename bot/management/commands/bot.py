@@ -67,6 +67,25 @@ def keyboard_maker(buttons, number):
     return markup
 
 
+def send_santa_massage(lottery_list):
+    """lottery_list = [[1041573069, 293277450], [1041573069, 386453509], [1041573069, 386453509]]
+       Список списков из chat_id
+       Первый chat_id получател сообщения
+       Второй chat_id кому дарить подарок
+    """
+    for users in lottery_list:
+        user_1, user_2 = users
+        user_2 = GameUser.objects.get(td_id=user_2)
+        text = f"""
+        Жеребьевка в игре “Тайный Санта” проведена! 
+        Спешу сообщить кто тебе выпал {user_2.name}
+        Телефон: {user_2.phone}
+        Письмо Санте: {user_2.letter}
+        Вишлист:
+        """
+        bot.send_message(chat_id=user_1, text=text)
+
+
 def start(update, context):
     user = update.message.from_user
     text = f"""Привет, {user.first_name}!
