@@ -8,6 +8,7 @@ from typing import Optional
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 from telegram.ext import ConversationHandler
+from telegram.utils import helpers
 from telegram.utils.request import Request
 from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
@@ -128,22 +129,21 @@ def choose_game(update, context):
         return GAME
 
 
-def check_code(update, context):
+def check_code(game_code, update, context):
     user = update.message.from_user
-    user_message = update.message.text
     context.user_data['item_names'] = ""
     context.user_data['item_ids'] = ""
     context.user_data['interest_names'] = ""
     context.user_data['interest_ids'] = ""
     try:
-        game = Game.objects.get(code=int(user_message))
+        game = Game.objects.get(code=int(game_code))
     except Game.DoesNotExist:
         user = update.message.from_user
         update.message.reply_text("Такая игра не найдена")
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
-    if GameUser.objects.filter(game__code=int(user_message)):
+    if GameUser.objects.filter(game__code=int(game_code)):
         update.message.reply_text("Вы уже в игре")
         text = f"""
         название игры: {game.name}
@@ -173,6 +173,16 @@ def check_code(update, context):
         update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
         update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
         return PLAYER_NAME
+
+
+def check_code_handler(update, context):
+    game_code = update.message.text
+    check_code(game_code, update, context)
+
+
+def start_code(update, context):
+    game_code = context.args[0]
+    check_code(game_code, update, context)
 
 
 def get_game_title(update, context):
@@ -282,7 +292,11 @@ def create_game(update, context):
         update.message.reply_text(text)
         update.message.reply_text("Перешлите своим друзьям текст который находится ниже")
         markup = get_menu(user)[1]
-        text = f"Приглашаю вас присоединиться к игре Тайный Санта. Приходи на бот @SecretSanta нажимай присоединиться к игре, введи код {game_code}, и следуй инструкции бота"
+        url = helpers.create_deep_linked_url(bot.username, str(game_code))
+        text = f"Приглашаю вас присоединиться к игре Тайный Санта. " \
+               f"Приходи на бот @SecretSanta нажимай присоединиться к игре" \
+               f", введи код {game_code}, и следуй инструкции бота\n" \
+               f"Либо поделись ссылкой: {url}"
         update.message.reply_text(text, reply_markup=markup)
         return GAME
     elif user_message == "Вернуться в меню":
@@ -693,7 +707,10 @@ class Command(BaseCommand):
         updater = Updater(token=TELEGRAM_TOKEN)
         dispatcher = updater.dispatcher
         conv_handler = ConversationHandler(
-            entry_points=[CommandHandler('start', start)],
+            entry_points=[
+                CommandHandler('start', start_code, Filters.regex(r'\d+')),
+                CommandHandler('start', start)
+            ],
             states={
                 GAME: [MessageHandler(Filters.text, choose_game)],
                 GAME_TITLE: [MessageHandler(Filters.text, get_game_title)],
@@ -702,7 +719,7 @@ class Command(BaseCommand):
                 REG_DATE: [MessageHandler(Filters.text, get_reg_date)],
                 GIFTS_DATE: [MessageHandler(Filters.text, get_gifts_date)],
                 CREATE_GAME: [MessageHandler(Filters.text, create_game)],
-                CHECK_CODE: [MessageHandler(Filters.text, check_code)],
+                CHECK_CODE: [MessageHandler(Filters.text, check_code_handler)],
                 PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
                                MessageHandler(Filters.text, get_player_phone)],
