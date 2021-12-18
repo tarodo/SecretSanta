@@ -77,11 +77,6 @@ def get_created_pair(users):
 
 
 def send_santa_massage(game_code):
-    """lottery_list = [[1041573069, 293277450], [1041573069, 386453509], [1041573069, 386453509]]
-       Список списков из chat_id
-       Первый chat_id получател сообщения
-       Второй chat_id кому дарить подарок
-    """
     players = GameUser.objects.filter(game__code=game_code)
     all_players = []
     for player in players:
@@ -101,7 +96,6 @@ def send_santa_massage(game_code):
 
 
 def start(update, context):
-
     user = update.message.from_user
     text = f"""Привет, {user.first_name}!
         Организуй тайный обмен подарками, 
@@ -122,7 +116,6 @@ def start(update, context):
 def choose_game(update, context):
     user_message = update.message.text
     if user_message == "Создать игру":
-        send_santa_massage(553362)
         update.message.reply_text("Напишите название вашей игры")
         return GAME_TITLE
     elif user_message == "Присоединиться к игре":
