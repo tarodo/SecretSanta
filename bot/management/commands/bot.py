@@ -261,8 +261,8 @@ def get_gifts_date(update, context):
     text = f"""Ваша игра:
                Название: {context.user_data.get("game_title")}
                Ограничения: {context.user_data.get("cost")} 
-               Дата регистрации: {context.user_data.get("reg_date")}
-               Дата отправки подарков: {context.user_data.get("gifts_date")}"""
+               Дата регистрации: {context.user_data.get("reg_date").strftime('%d.%m.%Y')}
+               Дата отправки подарков: {context.user_data.get("gifts_date").strftime('%d.%m.%Y')}"""
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
     markup = keyboard_maker(buttons, 2)
