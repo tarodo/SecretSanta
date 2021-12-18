@@ -18,14 +18,6 @@ not_users_pair = [
 ('chatid_user_6', 'chatid_user_3'),
 ]
 
-# def get_created_pair(users):
-#     user_pairs=[]
-#     for user in range(len(users)):
-#         user_pair = users[user], users[(user+1)%(len(users))]
-#         user_pairs.append(user_pair)
-#     return user_pairs
-
-
 
 def pairup(users, not_users_pair):
     random.shuffle(users)
