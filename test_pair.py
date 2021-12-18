@@ -13,7 +13,7 @@ users = [
 ]
 
 
-def get_created_pair(users):
+def get_created_pair(users=None):
     user_pairs=[]
     for user in range(len(users)):
         user_pair = users[user], users[(user+1)%(len(users))]

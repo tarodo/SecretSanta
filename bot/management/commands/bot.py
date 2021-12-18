@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
     REG_PLAYER,
     SHOW_ITEMS,
     READ_ITEMS,
-) = range(16)
+    ADD_TO_GAME
+) = range(17)
 
 DIVIDER = ":%:"
 DIVIDER_NEW = "!!"
@@ -67,12 +68,25 @@ def keyboard_maker(buttons, number):
     return markup
 
 
-def send_santa_massage(lottery_list):
+def get_created_pair(users):
+    user_pairs=[]
+    for user in range(len(users)):
+        user_pair = users[user], users[(user+1)%(len(users))]
+        user_pairs.append(user_pair)
+    return user_pairs
+
+
+def send_santa_massage(game_code):
     """lottery_list = [[1041573069, 293277450], [1041573069, 386453509], [1041573069, 386453509]]
        Список списков из chat_id
        Первый chat_id получател сообщения
        Второй chat_id кому дарить подарок
     """
+    players = GameUser.objects.filter(game__code=game_code)
+    all_players = []
+    for player in players:
+        all_players.append(player.td_id)
+    lottery_list = get_created_pair(all_players)
     for users in lottery_list:
         user_1, user_2 = users
         user_2 = GameUser.objects.get(td_id=user_2)
@@ -87,6 +101,7 @@ def send_santa_massage(lottery_list):
 
 
 def start(update, context):
+
     user = update.message.from_user
     text = f"""Привет, {user.first_name}!
         Организуй тайный обмен подарками, 
@@ -107,6 +122,7 @@ def start(update, context):
 def choose_game(update, context):
     user_message = update.message.text
     if user_message == "Создать игру":
+        send_santa_massage(553362)
         update.message.reply_text("Напишите название вашей игры")
         return GAME_TITLE
     elif user_message == "Присоединиться к игре":
@@ -143,7 +159,9 @@ def check_code(update, context):
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
-    if GameUser.objects.filter(game__code=int(user_message)):
+    game_user = GameUser.objects.filter(game__code=int(user_message))
+    #if GameUser.objects.filter(game__code=int(user_message)):
+    if not len(game_user):
         update.message.reply_text("Вы уже в игре")
         text = f"""
         название игры: {game.name}
@@ -154,7 +172,7 @@ def check_code(update, context):
         #update.message.reply_text(text)
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
-        return GAME 
+        return ADD_TO_GAME
     else:
         context.user_data["game_id"] = game.id
         context.user_data["game_title"] = game.name
@@ -167,12 +185,75 @@ def check_code(update, context):
         дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
         """
         update.message.reply_text(game_description)
+        game_user = GameUser.objects.filter(td_id=update.message.chat_id)
+        if game_user:
+            user = GameUser.objects.get(td_id=update.message.chat_id)
+            update.message.reply_text("Вы уже зарегистрированы")
+            context.user_data["user_card"] = user
+            context.user_data["game_id"] = user_message
+            text = f"""Ваши данные:
+                        Имя: {user.name} 
+                        Телефон: {user.phone}
+                        Интересы: 
+                        Подарки: 
+                        Письмо Санте: {user.letter}"""
+            update.message.reply_text(text)
+            buttons = ["Продолжить", "Вернуться в меню"]
+            markup = keyboard_maker(buttons, 2)
+            update.message.reply_text("Если всё верно жмите продолжить",
+                                      reply_markup=markup)
+            return ADD_TO_GAME
         user_first_name = user.first_name or ""
         buttons = [user_first_name]
         markup = keyboard_maker(buttons, 1)
         update.message.reply_text("Давайте зарегистрируемся", reply_markup=markup)
         update.message.reply_text("Введите своё имя или подтвердите его нажав на кнопку")
         return PLAYER_NAME
+
+
+def add_user_to_game(update, context):
+    user_message = update.message.text
+    if user_message == "Продолжить":
+        user = update.message.from_user
+        player = context.user_data.get("user_card")
+        game_id = context.user_data.get("game_id")
+        game = Game.objects.get(code=int(game_id))
+        player.game.add(game)
+        update.message.reply_text("Превосходно, ты в игре!")
+        text = f"""
+                31.12.2021 мы проведем жеребьевку и ты
+                узнаешь имя и контакты своего тайного друга.
+                Ему и нужно будет подарить подарок!
+                """
+        markup = get_menu(user)[1]
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
+    elif user_message == "Вернуться в меню":
+        user = update.message.from_user
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
+
+
+def reg_player(update, context):
+    user_message = update.message.text
+    if user_message == "Продолжить":
+        user = update.message.from_user
+        save_player(update, context)
+        update.message.reply_text("Превосходно, ты в игре!")
+        text = f"""
+        31.12.2021 мы проведем жеребьевку и ты
+        узнаешь имя и контакты своего тайного друга.
+        Ему и нужно будет подарить подарок!
+        """
+        markup = get_menu(user)[1]
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
+    elif user_message == "Вернуться в меню":
+        user = update.message.from_user
+        text, markup = get_menu(user)
+        update.message.reply_text(text, reply_markup=markup)
+        return GAME
 
 
 def get_game_title(update, context):
@@ -344,7 +425,7 @@ def get_player_phone(update, context):
 def add_interest(context):
     interest_name = context.user_data.get("current_interest")
     if interest_name != "":
-        interest_id = None
+        interest_id = "usa"#None
         try:
             interest = Interest.objects.filter(name=interest_name).get()
             interest_id = interest.id
@@ -711,6 +792,7 @@ class Command(BaseCommand):
                 REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
                 SHOW_ITEMS: [MessageHandler(Filters.text, show_items)],
                 READ_ITEMS: [MessageHandler(Filters.text, read_items)],
+                ADD_TO_GAME: [MessageHandler(Filters.text, add_user_to_game)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
