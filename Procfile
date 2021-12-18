@@ -1,1 +1,2 @@
-web: gunicorn bot.wsgi --log-file -
+release: python manage.py migrate
+web: gunicorn SecretSanta.wsgi --log-file=-
