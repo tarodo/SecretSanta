@@ -88,14 +88,25 @@ def send_santa_massage(lottery_list):
         bot.send_message(chat_id=user_1, text=text)
 
 
+def get_menu(user):
+    text = f"""Привет, {user.first_name}!
+                Организуй тайный обмен подарками, 
+                запусти праздничное настроение!"""
+    buttons = ["Создать игру", "Присоединиться к игре"]
+    if Game.objects.filter(tg_id_owner=user.id).count() > 0:
+        buttons.append("Мои игры")
+    markup = keyboard_maker(buttons, 2)
+    return text, markup
+
+
+def deep_link_generator(game_code):
+    return helpers.create_deep_linked_url(bot.username, str(game_code))
+
+
 def start(update, context):
     user = update.message.from_user
-    text = f"""Привет, {user.first_name}!
-        Организуй тайный обмен подарками, 
-        запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
+    text, markup = get_menu(user)
     caption = "Хоу-хоу-хоу 🎅"
-    markup = keyboard_maker(buttons, 2)
     bot.send_photo(
         chat_id=update.message.chat_id,
         photo="https://d298hcpblme28l.cloudfront.net/products/72dee529da636fedbb8bce04f204f75d_resize.jpg",
@@ -107,6 +118,7 @@ def start(update, context):
 
 
 def choose_game(update, context):
+    user = update.message.from_user
     user_message = update.message.text
     if user_message == "Создать игру":
         update.message.reply_text("Напишите название вашей игры")
@@ -120,13 +132,14 @@ def choose_game(update, context):
             update.message.reply_text("У Вас пока нет игр, чтобы поадминить")
         for game in games:
             update.message.reply_text(f"Игра: {game.name}\n"
-                                      f"ограничение стоимости: {game.cost_limit}\n"
-                                      f"период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
-                                      f"дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}")
-        text = f"Ничего пока с этим сделать нельзя :("
-        buttons = ["Создать игру", "Присоединиться к игре", "Мои игры"]
-        markup = keyboard_maker(buttons, 2)
-        update.message.reply_text(text, reply_markup=markup)
+                                      f"Ограничение стоимости: {game.cost_limit}\n"
+                                      f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
+                                      f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
+                                      f"Ссылка для приглашений: "
+                                      )
+            update.message.reply_text(f"{deep_link_generator(game.code)}")
+        _, markup = get_menu(user)
+        update.message.reply_text(text="Ваши действия:", reply_markup=markup)
         return GAME
 
 
@@ -293,7 +306,7 @@ def create_game(update, context):
         update.message.reply_text(text)
         update.message.reply_text("Перешлите своим друзьям текст который находится ниже")
         markup = get_menu(user)[1]
-        url = helpers.create_deep_linked_url(bot.username, str(game_code))
+        url = deep_link_generator(game_code)
         text = f"Приглашаю вас присоединиться к игре Тайный Санта. " \
                f"Приходи на бот @SecretSanta нажимай присоединиться к игре" \
                f", введи код {game_code}, и следуй инструкции бота\n" \
@@ -702,15 +715,6 @@ def save_player(update, context):
             pass
 
     context.user_data["player_params"] = player_params
-
-
-def get_menu(user):
-    text = f"""Привет, {user.first_name}!
-                Организуй тайный обмен подарками, 
-                запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре"]
-    markup = keyboard_maker(buttons, 1)
-    return text, markup
 
 
 def cancel(update, _):
