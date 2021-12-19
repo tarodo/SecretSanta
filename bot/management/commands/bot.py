@@ -176,7 +176,10 @@ def show_wishlist(player_tg_id: int) -> str:
     if wishlist_raw:
         for item in wishlist_raw.split("; "):
             wishlist.append(f"{item}")
-    return "\n".join(wishlist)
+    if wishlist:
+        return "\n  - " + "\n  - ".join(wishlist)
+    else:
+        return ""
 
 
 def show_my_games(user, update):
@@ -306,7 +309,7 @@ def check_code(game_code, update, context):
         """
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
-        return ADD_TO_GAME
+        return GAME
     else:
         context.user_data["game_id"] = game.id
         context.user_data["game_title"] = game.name
@@ -325,13 +328,19 @@ def check_code(game_code, update, context):
             update.message.reply_text("Вы уже зарегистрированы")
             context.user_data["user_card"] = user
             context.user_data["game_id"] = user_message
-            text = f"""Ваши данные:
-                        Имя: {user.name} 
-                        Телефон: {user.phone}
-                        Интересы: 
-                        Подарки: {show_wishlist(update.message.chat_id)}
-                        Письмо Санте: {user.letter}"""
-            update.message.reply_text(text)
+            text = f"Ваши данные:\n" \
+                   f"Имя: *{user.name}*\n" \
+                   f"Телефон: *{user.phone}*\n"
+            interests = show_interests(user.td_id)
+            if interests:
+                text += f"Интересы: *{interests}*\n"
+            wishlist = show_wishlist(user.td_id)
+            if wishlist:
+                text += f"Подарки: *{wishlist}*\n"
+            letter = user.letter
+            if letter:
+                f"Письмо Санте: *{letter}*"
+            update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
             buttons = ["Продолжить", "Вернуться в меню"]
             markup = keyboard_maker(buttons, 2)
             update.message.reply_text("Если всё верно жмите продолжить",
@@ -575,7 +584,6 @@ def get_player_phone(update, context):
 def add_interest(context):
     interest_name = context.user_data.get("current_interest")
     if interest_name != "":
-        interest_id = "usa"  # None
         try:
             interest = Interest.objects.filter(name=interest_name).get()
             interest_id = interest.id
