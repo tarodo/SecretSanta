@@ -222,11 +222,22 @@ def change_query_handler(update, context):
         text = f"Введите новое название для {game.name}"
         update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
         return GAME_CHANGE_NAME
+    elif game_state == "players":
+        players = GameUser.objects.filter(game__id=game_id)
+        if not players:
+            text = f"🥺 Упссс... \nК игре '{game.name}' ещё никто не присоединился"
+            update.effective_user.send_message(text)
+            return GAME
+        else:
+            text = f"В игре '{game.name}' участвуют:\n"
+            for player in players:
+                text += f" {player.name} - @{player.username}\n"
+            update.effective_user.send_message(text)
+            return GAME
     elif game_state == "lottery":
         send_santa_massage(game_id)
         text = "Жеребьёвка проведена, всем участникам игры отправлены сообщения"
-        update.effective_user.send_message(text,
-                                           reply_markup=ReplyKeyboardRemove())
+        update.effective_user.send_message(text)
         return GAME
 
 
