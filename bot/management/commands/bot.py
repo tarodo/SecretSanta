@@ -64,7 +64,7 @@ def escape_characters(text: str) -> str:
     """Screen characters for Markdown V2"""
     text = text.replace('\\', '')
 
-    characters = ['.', '+', '(', ')', '-', '!']
+    characters = ['.', '+', '(', ')', '-', '!', '=', '_']
     for character in characters:
         text = text.replace(character, f'\{character}')
     return text
@@ -203,12 +203,14 @@ def show_my_games(user, update):
         ]
         reply_in = InlineKeyboardMarkup(keyboard)
         players_count = game.players.all().count()
-        update.message.reply_text(f"Игра: {game.name}\n"
-                                  f"Ограничение стоимости: {game.cost_limit}\n"
-                                  f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
-                                  f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
-                                  f"Количество игроков: {players_count}\n"
-                                  f"Ссылка для приглашений: {deep_link_generator(game.code)}",
+        text = f"Игра: *{game.name}*\n" \
+               f"Ограничение стоимости: *{game.cost_limit}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+               f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
+               f"Количество игроков: *{players_count}*\n" \
+               f"Ссылка для приглашений: {deep_link_generator(game.code)}"
+        update.message.reply_text(escape_characters(text),
+                                  parse_mode=ParseMode.MARKDOWN_V2,
                                   reply_markup=reply_in
                                   )
     player = GameUser.objects.filter(td_id=user.id).first()
@@ -229,12 +231,12 @@ def show_my_games(user, update):
         update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
         for game in player_games:
             players_count = game.players.all().count()
-            update.message.reply_text(f"Игра: {game.name}\n"
-                                      f"Ограничение стоимости: {game.cost_limit}\n"
-                                      f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
-                                      f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
-                                      f"Количество игроков: {players_count}\n"
-                                      )
+            text = f"Игра: *{game.name}*\n" \
+                   f"Ограничение стоимости: *{game.cost_limit}*\n" \
+                   f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+                   f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
+                   f"Количество игроков: *{players_count}*"
+            update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
     return GAME
 
 
@@ -275,7 +277,7 @@ def change_query_handler(update, context):
         else:
             text = f"В игре '{game.name}' участвуют:\n"
             for player in players:
-                text += f"{player.name} - @{player.username}\n"
+                text += f"{player.id}. {player.name} - @{player.username}\n"
             update.effective_user.send_message(text)
             return GAME
     elif game_state == "lottery":
@@ -296,7 +298,6 @@ def get_game_new_name(update, context):
 
 
 def check_code(game_code, update, context):
-    user_message = update.message.text
     user = update.message.from_user
     context.user_data['item_names'] = ""
     context.user_data['item_ids'] = ""
@@ -310,7 +311,7 @@ def check_code(game_code, update, context):
         text, markup = get_menu(user)
         update.message.reply_text(text, reply_markup=markup)
         return GAME
-    game_user = GameUser.objects.filter(game__code=int(user_message),
+    game_user = GameUser.objects.filter(game__code=int(game_code),
                                         td_id=update.message.chat_id)
     if game_user:
         update.message.reply_text("Вы уже в игре")
@@ -340,7 +341,7 @@ def check_code(game_code, update, context):
             user = GameUser.objects.get(td_id=update.message.chat_id)
             update.message.reply_text("Вы уже зарегистрированы")
             context.user_data["user_card"] = user
-            context.user_data["game_id"] = user_message
+            context.user_data["game_id"] = game.id
             text = f"Ваши данные:\n" \
                    f"Имя: *{user.name}*\n" \
                    f"Телефон: *{user.phone}*\n"
@@ -373,11 +374,11 @@ def add_user_to_game(update, context):
         user = update.message.from_user
         player = context.user_data.get("user_card")
         game_id = context.user_data.get("game_id")
-        game = Game.objects.get(code=int(game_id))
+        game = Game.objects.get(id=int(game_id))
         player.game.add(game)
         update.message.reply_text("Превосходно, ты в игре!")
         text = f"""
-                31.12.2021 мы проведем жеребьевку и ты
+                {game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку и ты
                 узнаешь имя и контакты своего тайного друга.
                 Ему и нужно будет подарить подарок!
                 """
@@ -396,13 +397,14 @@ def reg_player(update, context):
     if user_message == "Продолжить":
         user = update.message.from_user
         save_player(update, context)
+        game_id = context.user_data.get("game_id")
+        game = Game.objects.get(id=int(game_id))
         update.message.reply_text("Превосходно, ты в игре!")
         text = f"""
-        31.12.2021 мы проведем жеребьевку и ты
+        {game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку и ты
         узнаешь имя и контакты своего тайного друга.
         Ему и нужно будет подарить подарок!
         """
-        # TODO: Correct date to date from DB
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
         return GAME
@@ -597,6 +599,7 @@ def get_player_phone(update, context):
 def add_interest(context):
     interest_name = context.user_data.get("current_interest")
     if interest_name != "":
+        interest_id = None
         try:
             interest = Interest.objects.filter(name=interest_name).get()
             interest_id = interest.id
