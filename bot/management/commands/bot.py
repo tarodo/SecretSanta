@@ -179,7 +179,7 @@ def deep_link_generator(game_code):
     return helpers.create_deep_linked_url(bot.username, str(game_code))
 
 
-def start(update, context):
+def start(update, _):
     user = update.message.from_user
     text, markup = get_menu(user)
     caption = "Хоу-хоу-хоу 🎅"
@@ -247,7 +247,7 @@ def show_my_games(user, update):
     return GAME
 
 
-def choose_game(update, context):
+def choose_game(update, _):
     user = update.message.from_user
     user_message = update.message.text
     if user_message == "Создать игру":
@@ -969,29 +969,29 @@ class Command(BaseCommand):
             ],
             states={
                 GAME: [
-                    MessageHandler(Filters.text, choose_game),
+                    MessageHandler(Filters.text & ~Filters.command, choose_game),
                     CallbackQueryHandler(change_query_handler, pattern='^game:')
                 ],
-                GAME_CHANGE_NAME: [MessageHandler(Filters.text, get_game_new_name)],
-                GAME_TITLE: [MessageHandler(Filters.text, get_game_title)],
-                COST: [MessageHandler(Filters.text, choose_cost)],
-                COST_LIMIT: [MessageHandler(Filters.text, get_cost_limit)],
-                REG_DATE: [MessageHandler(Filters.text, get_reg_date)],
-                GIFTS_DATE: [MessageHandler(Filters.text, get_gifts_date)],
-                CREATE_GAME: [MessageHandler(Filters.text, create_game)],
-                CHECK_CODE: [MessageHandler(Filters.text, check_code_handler)],
-                PLAYER_NAME: [MessageHandler(Filters.text, get_player_name)],
-                PLAYER_PHONE: [MessageHandler(Filters.contact, get_player_phone),
-                               MessageHandler(Filters.text, get_player_phone)],
-                PLAYER_INTEREST: [MessageHandler(Filters.text, get_player_interest)],
-                PLAYER_LETTER: [MessageHandler(Filters.text, get_player_letter)],
-                REG_PLAYER: [MessageHandler(Filters.text, reg_player)],
+                GAME_CHANGE_NAME: [MessageHandler(Filters.text & ~Filters.command, get_game_new_name)],
+                GAME_TITLE: [MessageHandler(Filters.text & ~Filters.command, get_game_title)],
+                COST: [MessageHandler(Filters.text & ~Filters.command, choose_cost)],
+                COST_LIMIT: [MessageHandler(Filters.text & ~Filters.command, get_cost_limit)],
+                REG_DATE: [MessageHandler(Filters.text & ~Filters.command, get_reg_date)],
+                GIFTS_DATE: [MessageHandler(Filters.text & ~Filters.command, get_gifts_date)],
+                CREATE_GAME: [MessageHandler(Filters.text & ~Filters.command, create_game)],
+                CHECK_CODE: [MessageHandler(Filters.text & ~Filters.command, check_code_handler)],
+                PLAYER_NAME: [MessageHandler(Filters.text & ~Filters.command, get_player_name)],
+                PLAYER_PHONE: [MessageHandler(Filters.contact & ~Filters.command, get_player_phone),
+                               MessageHandler(Filters.text & ~Filters.command, get_player_phone)],
+                PLAYER_INTEREST: [MessageHandler(Filters.text & ~Filters.command, get_player_interest)],
+                PLAYER_LETTER: [MessageHandler(Filters.text & ~Filters.command, get_player_letter)],
+                REG_PLAYER: [MessageHandler(Filters.text & ~Filters.command, reg_player)],
                 SHOW_ITEMS: [
-                    MessageHandler(Filters.text, show_items),
+                    MessageHandler(Filters.text & ~Filters.command, show_items),
                     CallbackQueryHandler(item_control, pattern='^item:')
                 ],
-                READ_ITEMS: [MessageHandler(Filters.text, read_items)],
-                ADD_TO_GAME: [MessageHandler(Filters.text, add_user_to_game)],
+                READ_ITEMS: [MessageHandler(Filters.text & ~Filters.command, read_items)],
+                ADD_TO_GAME: [MessageHandler(Filters.text & ~Filters.command, add_user_to_game)],
             },
             fallbacks=[CommandHandler('cancel', cancel)],
         )
