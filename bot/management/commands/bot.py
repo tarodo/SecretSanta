@@ -726,7 +726,9 @@ def show_items(update, context):
     user_message = update.message.text
     if user_message == "Закончить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
-        update.message.reply_text(text)
+        buttons = ["Пропустить"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
         context.user_data['current_item_id'] = ""
         context.user_data['current_item_name'] = ""
         context.user_data['current_interest'] = ""
@@ -756,7 +758,9 @@ def read_items(update, context):
     user_message = update.message.text
     if user_message == "Закончить":
         text = "Напишите пару слов Санте 🎅, ему будет приятно 😊"
-        update.message.reply_text(text)
+        buttons = ["Пропустить"]
+        markup = keyboard_maker(buttons, 2)
+        update.message.reply_text(text, reply_markup=markup)
         context.user_data['current_item_id'] = ""
         context.user_data['current_item_name'] = ""
         context.user_data['current_interest'] = ""
@@ -806,6 +810,8 @@ def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
 def get_player_letter(update, context):
     user_message = update.message.text
     context.user_data["player_letter"] = user_message
+    if user_message == "Пропустить":
+        context.user_data["player_letter"] = ""
     text = f"Ваши данные:\n" \
            f"Название игры: *{context.user_data.get('game_title')}*\n" \
            f"Имя: *{context.user_data.get('player_name')}*\n" \
