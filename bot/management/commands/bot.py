@@ -79,8 +79,9 @@ def get_created_pair(users):
     return user_pairs
 
 
-def send_santa_massage(game_code):
-    players = GameUser.objects.filter(game__code=game_code)
+def send_santa_massage(game_id):
+    game = Game.objects.get(id=game_id)
+    players = GameUser.objects.filter(game__id=game_id)
     all_players = []
     for player in players:
         all_players.append(player.td_id)
@@ -89,7 +90,7 @@ def send_santa_massage(game_code):
         user_1, user_2 = users
         user_2 = GameUser.objects.get(td_id=user_2)
         text = f"""
-        Жеребьевка в игре “Тайный Санта” проведена! 
+        Жеребьевка в игре “{game.name}” проведена! 
         Спешу сообщить кто тебе выпал {user_2.name}
         Телефон: {user_2.phone}
         Письмо Санте: {user_2.letter}
@@ -141,6 +142,10 @@ def show_my_games(user, update):
                 InlineKeyboardButton("Сменить название", callback_data=f'game:{game.id}:change_name'),
                 InlineKeyboardButton("Участники", callback_data=f'game:{game.id}:players'),
             ],
+            [
+                InlineKeyboardButton("Провести жеребьёвку",
+                                     callback_data=f'game:{game.id}:lottery'),
+            ]
         ]
         reply_in = InlineKeyboardMarkup(keyboard)
         players_count = game.players.all().count()
@@ -196,6 +201,12 @@ def change_query_handler(update, context):
         text = f"Введите новое название для {game.name}"
         update.effective_user.send_message(text, reply_markup=ReplyKeyboardRemove())
         return GAME_CHANGE_NAME
+    elif game_state == "lottery":
+        send_santa_massage(game_id)
+        text = "Жеребьёвка проведена, всем участникам игры отправлены сообщения"
+        update.effective_user.send_message(text,
+                                           reply_markup=ReplyKeyboardRemove())
+
 
 
 def get_game_new_name(update, context):
