@@ -64,7 +64,7 @@ def escape_characters(text: str) -> str:
     """Screen characters for Markdown V2"""
     text = text.replace('\\', '')
 
-    characters = ['.', '+', '(', ')', '-']
+    characters = ['.', '+', '(', ')', '-', '!']
     for character in characters:
         text = text.replace(character, f'\{character}')
     return text
@@ -92,61 +92,6 @@ def pairup(users, not_user_pairs):
         return pairup(users, not_user_pairs)
     else:
         return new_pairs
-
-
-def send_santa_massage(game_id):
-    game = Game.objects.get(id=game_id)
-    players = GameUser.objects.filter(game__id=game_id)
-    all_players = []
-    for player in players:
-        all_players.append(player.td_id)
-    lottery_list = pairup(all_players, [])
-    for users in lottery_list:
-        user_1, user_2 = users
-        user_2 = GameUser.objects.get(td_id=user_2)
-        text = f"""
-        Жеребьевка в игре “{game.name}” проведена! 
-        Спешу сообщить, кто тебе выпал {user_2.name}
-        Телефон: {user_2.phone}
-        Телеграм: @{user_2.username}
-        Письмо Санте: {user_2.letter}
-        Интересы: {show_interests(user_2.td_id)}
-        Вишлист:\n{show_wishlist(user_2.td_id)}
-        """
-        bot.send_message(chat_id=user_1, text=text)
-
-
-def get_menu(user):
-    text = f"""Привет, {user.first_name}!
-                Организуй тайный обмен подарками, 
-                запусти праздничное настроение!"""
-    buttons = ["Создать игру", "Присоединиться к игре"]
-    player = GameUser.objects.filter(td_id=user.id).first()
-    game_count = Game.objects.filter(tg_id_owner=user.id).count()
-    if player:
-        game_count = player.game.all().count()
-    if game_count:
-        buttons.append("Мои игры")
-    markup = keyboard_maker(buttons, 2)
-    return text, markup
-
-
-def deep_link_generator(game_code):
-    return helpers.create_deep_linked_url(bot.username, str(game_code))
-
-
-def start(update, context):
-    user = update.message.from_user
-    text, markup = get_menu(user)
-    caption = "Хоу-хоу-хоу 🎅"
-    bot.send_photo(
-        chat_id=update.message.chat_id,
-        photo="https://d298hcpblme28l.cloudfront.net/products/72dee529da636fedbb8bce04f204f75d_resize.jpg",
-        caption=caption,
-        parse_mode="HTML",
-    )
-    update.message.reply_text(text, reply_markup=markup)
-    return GAME
 
 
 def show_interests(player_tg_id: int) -> str:
@@ -182,6 +127,65 @@ def show_wishlist(player_tg_id: int) -> str:
         return ""
 
 
+def send_santa_massage(game_id):
+    game = Game.objects.get(id=game_id)
+    players = GameUser.objects.filter(game__id=game_id)
+    all_players = []
+    for player in players:
+        all_players.append(player.td_id)
+    lottery_list = pairup(all_players, [])
+    for users in lottery_list:
+        user_1, user_2 = users
+        user_2 = GameUser.objects.get(td_id=user_2)
+        text = f"Жеребьевка в игре *“{game.name}”* проведена!\n" \
+               f"Спешу сообщить, вы Санта для *{user_2.name}*\n" \
+               f"Телефон: *{user_2.phone}*\n" \
+               f"Телеграм: @{user_2.username}\n"
+        interests = show_interests(user_2.td_id)
+        if interests:
+            text += f"Интересы: *{interests}*\n"
+        wishlist = show_wishlist(user_2.td_id)
+        if wishlist:
+            text += f"Подарки: *{wishlist}*\n"
+        letter = user_2.letter
+        if letter:
+            f"Письмо Санте: *{letter}*"
+        bot.send_message(chat_id=user_1, text=escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
+
+
+def get_menu(user):
+    text = f"""Привет, {user.first_name}!
+                Организуй тайный обмен подарками, 
+                запусти праздничное настроение!"""
+    buttons = ["Создать игру", "Присоединиться к игре"]
+    player = GameUser.objects.filter(td_id=user.id).first()
+    game_count = Game.objects.filter(tg_id_owner=user.id).count()
+    if player:
+        game_count = player.game.all().count()
+    if game_count:
+        buttons.append("Мои игры")
+    markup = keyboard_maker(buttons, 2)
+    return text, markup
+
+
+def deep_link_generator(game_code):
+    return helpers.create_deep_linked_url(bot.username, str(game_code))
+
+
+def start(update, context):
+    user = update.message.from_user
+    text, markup = get_menu(user)
+    caption = "Хоу-хоу-хоу 🎅"
+    bot.send_photo(
+        chat_id=update.message.chat_id,
+        photo="https://d298hcpblme28l.cloudfront.net/products/72dee529da636fedbb8bce04f204f75d_resize.jpg",
+        caption=caption,
+        parse_mode="HTML",
+    )
+    update.message.reply_text(text, reply_markup=markup)
+    return GAME
+
+
 def show_my_games(user, update):
     games = Game.objects.filter(tg_id_owner=user.id).all()
     _, markup = get_menu(user)
@@ -211,6 +215,17 @@ def show_my_games(user, update):
     if player:
         player_games = player.game.all()
         _, markup = get_menu(user)
+        text = "Ваши предпочтения:\n"
+        interests = show_interests(player.td_id)
+        if interests:
+            text += f"Интересы: *{interests}*\n"
+        wishlist = show_wishlist(player.td_id)
+        if wishlist:
+            text += f"Подарки: *{wishlist}*\n"
+        letter = player.letter
+        if letter:
+            f"Письмо Санте: *{letter}*"
+        update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
         update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
         for game in player_games:
             players_count = game.players.all().count()
@@ -219,8 +234,6 @@ def show_my_games(user, update):
                                       f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
                                       f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
                                       f"Количество игроков: {players_count}\n"
-                                      f"Ваши интересы: {show_interests(user.id)}\n"
-                                      f"Ваш вишлист:\n{show_wishlist(user.id)}"
                                       )
     return GAME
 
