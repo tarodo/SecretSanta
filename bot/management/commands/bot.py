@@ -63,10 +63,17 @@ DIVIDER_INTEREST = ":"
 def escape_characters(text: str) -> str:
     """Screen characters for Markdown V2"""
     text = text.replace('\\', '')
-
     characters = ['.', '+', '(', ')', '-', '!', '=', '_']
     for character in characters:
         text = text.replace(character, f'\{character}')
+    return text
+
+
+def markdown_save_style(text: str) -> str:
+    """Save letters for send it to Markdown V2 text"""
+    letters = ["*"]
+    for character in letters:
+        text = text.replace(character, "")
     return text
 
 
@@ -208,7 +215,7 @@ def show_my_games(user, update):
                f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
                f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
                f"Количество игроков: *{players_count}*\n" \
-               f"Ссылка для приглашений: {deep_link_generator(game.code)}"
+               f"Ссылка для приглашений: {markdown_save_style(deep_link_generator(game.code))}"
         update.message.reply_text(escape_characters(text),
                                   parse_mode=ParseMode.MARKDOWN_V2,
                                   reply_markup=reply_in
@@ -597,7 +604,7 @@ def get_player_phone(update, context):
 
 
 def add_interest(context):
-    interest_name = context.user_data.get("current_interest")
+    interest_name = markdown_save_style(context.user_data.get("current_interest"))
     if interest_name != "":
         interest_id = None
         try:
@@ -697,7 +704,7 @@ def get_player_interest(update, context):
 
 
 def add_item(context, divider: Optional[str] = ":%:"):
-    item_name = context.user_data.get("current_item_name")
+    item_name = markdown_save_style(context.user_data.get("current_item_name"))
     item_id = context.user_data.get("current_item_id")
     interest = context.user_data.get("current_interest")
     old_names: str = context.user_data.get("item_names")
@@ -833,7 +840,7 @@ def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
 
 def get_player_letter(update, context):
     user_message = update.message.text
-    context.user_data["player_letter"] = user_message
+    context.user_data["player_letter"] = markdown_save_style(user_message)
     if user_message == "Пропустить":
         context.user_data["player_letter"] = ""
     text = f"Ваши данные:\n" \
@@ -876,13 +883,11 @@ def get_interest_raw(context):
 
 def get_wishlist_raw(context):
     items: str = context.user_data.get("item_names")
-    logger.info(f"{items=}")
     raw_items = []
     for item in items.split(DIVIDER):
         if item.startswith(DIVIDER_NEW):
             item_info = item.replace(DIVIDER_NEW, "").split(DIVIDER_INTEREST)
             raw_items.append(f"{item_info[1]} ({item_info[0]})")
-    logger.info(f"{raw_items=}")
     return '; '.join(raw_items)
 
 
