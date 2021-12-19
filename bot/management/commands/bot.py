@@ -793,13 +793,19 @@ def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
 def get_player_letter(update, context):
     user_message = update.message.text
     context.user_data["player_letter"] = user_message
-    text = f"""Ваши данные:
-            Название игры: {context.user_data.get("game_title")}
-            Имя: {context.user_data.get("player_name")} 
-            Телефон: {context.user_data.get("player_phone")}
-            Интересы: {get_interests_for_showing(context)}
-            Подарки: {get_items_for_showing(context)}
-            Письмо Санте: {context.user_data.get("player_letter")}"""
+    text = f"Ваши данные:\n" \
+           f"Название игры: {context.user_data.get('game_title')}\n" \
+           f"Имя: {context.user_data.get('player_name')}\n" \
+           f"Телефон: {context.user_data.get('player_phone')}\n"
+    interests = get_interests_for_showing(context)
+    if interests:
+        text += f"Интересы: {interests}\n"
+    wishlist = get_items_for_showing(context)
+    if wishlist:
+        text += f"Подарки: {wishlist}\n"
+    letter = context.user_data.get('player_letter')
+    if letter:
+        text += f"Письмо Санте: {letter}\n"
     update.message.reply_text(text)
     buttons = ["Продолжить", "Вернуться в меню"]
     markup = keyboard_maker(buttons, 2)
