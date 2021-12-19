@@ -62,7 +62,7 @@ DIVIDER_INTEREST = ":"
 
 def chunks_generators(buttons, chunks_number):
     for button in range(0, len(buttons), chunks_number):
-        yield buttons[button : button + chunks_number]
+        yield buttons[button: button + chunks_number]
 
 
 def keyboard_maker(buttons, number):
@@ -96,9 +96,11 @@ def send_santa_massage(game_id):
         user_2 = GameUser.objects.get(td_id=user_2)
         text = f"""
         Жеребьевка в игре “{game.name}” проведена! 
-        Спешу сообщить кто тебе выпал {user_2.name}
+        Спешу сообщить, кто тебе выпал {user_2.name}
         Телефон: {user_2.phone}
+        Телеграм: @{user_2.username}
         Письмо Санте: {user_2.letter}
+        Интересы: {show_interests(user_2.td_id)}
         Вишлист:\n{show_wishlist(user_2.td_id)}
         """
         bot.send_message(chat_id=user_1, text=text)
@@ -137,6 +139,19 @@ def start(update, context):
     return GAME
 
 
+def show_interests(player_tg_id: int) -> str:
+    """Generate interests of the player. Return formatted string for showing"""
+    try:
+        player: GameUser = GameUser.objects.get(td_id=player_tg_id)
+    except GameUser.DoesNotExist:
+        return ""
+    interests = [interest.name for interest in player.interest.all()]
+    interests_raw = player.interest_raw
+    if interests_raw:
+        interests += [interest for interest in interests_raw.split("; ")]
+    return "; ".join(interests)
+
+
 def show_wishlist(player_tg_id: int) -> str:
     """Generate wishlist of the player. Return formatted string for showing"""
     try:
@@ -147,8 +162,10 @@ def show_wishlist(player_tg_id: int) -> str:
     for item in player.wishlist.all():
         interest_name = item.interest.name
         wishlist.append(f'{item.name} : {item.price}р. ({interest_name})')
-    for item in player.wishlist_raw.split("; "):
-        wishlist.append(f"{item}")
+    wishlist_raw = player.wishlist_raw
+    if wishlist_raw:
+        for item in wishlist_raw.split("; "):
+            wishlist.append(f"{item}")
     return "\n".join(wishlist)
 
 
@@ -189,6 +206,7 @@ def show_my_games(user, update):
                                       f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
                                       f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
                                       f"Количество игроков: {players_count}\n"
+                                      f"Ваши интересы: {show_interests(user.id)}\n"
                                       f"Ваш вишлист:\n{show_wishlist(user.id)}"
                                       )
     return GAME
@@ -231,7 +249,7 @@ def change_query_handler(update, context):
         else:
             text = f"В игре '{game.name}' участвуют:\n"
             for player in players:
-                text += f" {player.name} - @{player.username}\n"
+                text += f"{player.name} - @{player.username}\n"
             update.effective_user.send_message(text)
             return GAME
     elif game_state == "lottery":
@@ -268,7 +286,6 @@ def check_code(game_code, update, context):
         return GAME
     game_user = GameUser.objects.filter(game__code=int(user_message),
                                         td_id=update.message.chat_id)
-    print(game_user)
     if game_user:
         update.message.reply_text("Вы уже в игре")
         text = f"""
@@ -302,7 +319,7 @@ def check_code(game_code, update, context):
                         Имя: {user.name} 
                         Телефон: {user.phone}
                         Интересы: 
-                        Подарки: 
+                        Подарки: {show_wishlist(update.message.chat_id)}
                         Письмо Санте: {user.letter}"""
             update.message.reply_text(text)
             buttons = ["Продолжить", "Вернуться в меню"]
@@ -439,7 +456,7 @@ def get_gifts_date(update, context):
     user_message = update.message.text
     try:
         gifts_date = datetime.datetime.strptime(f"{user_message}",
-                                              "%d.%m.%Y").date()
+                                                "%d.%m.%Y").date()
     except ValueError:
         update.message.reply_text("Введена не корректная дата.")
         text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
@@ -498,14 +515,14 @@ def create_game(update, context):
 def save_game(update, context):
     user = update.message.from_user
     game_params = {
-        "game_title": context.user_data.get("game_title"), #str
-        "cost_limit": context.user_data.get("cost_limit"), #bool
-        "cost": context.user_data.get("cost"), #str
+        "game_title": context.user_data.get("game_title"),  # str
+        "cost_limit": context.user_data.get("cost_limit"),  # bool
+        "cost": context.user_data.get("cost"),  # str
         "reg_date": context.user_data.get("reg_date"),
         "gifts_date": context.user_data.get("gifts_date"),
-        "game_code": context.user_data.get("game_code"), #int
-        "chat-id": update.message.chat_id, #int
-        "user_name": user.username #str
+        "game_code": context.user_data.get("game_code"),  # int
+        "chat-id": update.message.chat_id,  # int
+        "user_name": user.username  # str
     }
     logger.info(f'{game_params=}')
     Game.objects.create(
@@ -548,7 +565,7 @@ def get_player_phone(update, context):
 def add_interest(context):
     interest_name = context.user_data.get("current_interest")
     if interest_name != "":
-        interest_id = "usa"#None
+        interest_id = "usa"  # None
         try:
             interest = Interest.objects.filter(name=interest_name).get()
             interest_id = interest.id
@@ -822,16 +839,16 @@ def get_wishlist_raw(context):
 def save_player(update, context):
     user = update.message.from_user
     player_params = {
-        "player_name": context.user_data.get("player_name"), #str
-        "player_email": context.user_data.get("player_email"), #str
-        "player_phone": context.user_data.get("player_phone"), #str
+        "player_name": context.user_data.get("player_name"),  # str
+        "player_email": context.user_data.get("player_email"),  # str
+        "player_phone": context.user_data.get("player_phone"),  # str
         "player_interest_ids": get_interest_ids(context),
         "player_wishlist_ids": get_wishlist_ids(context),
         "player_interest_raw": get_interest_raw(context),
-        "player_wishlist_raw": get_wishlist_raw(context), #str
-        "player_letter": context.user_data.get("player_letter"), #str
-        "player_chat-id": update.message.chat_id, #int
-        "player_user_name": user.username, #str
+        "player_wishlist_raw": get_wishlist_raw(context),  # str
+        "player_letter": context.user_data.get("player_letter"),  # str
+        "player_chat-id": update.message.chat_id,  # int
+        "player_user_name": user.username,  # str
         "player_game_id": context.user_data.get("game_id")
     }
     logger.info(f'{player_params=}')
