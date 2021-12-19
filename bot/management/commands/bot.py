@@ -9,7 +9,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardButton, \
-    InlineKeyboardMarkup, InputMediaPhoto
+    InlineKeyboardMarkup, InputMediaPhoto, ParseMode
 from telegram.ext import ConversationHandler, CallbackQueryHandler
 from telegram.utils import helpers
 from telegram.utils.request import Request
@@ -58,6 +58,16 @@ logger = logging.getLogger(__name__)
 DIVIDER = ":%:"
 DIVIDER_NEW = "!!"
 DIVIDER_INTEREST = ":"
+
+
+def escape_characters(text: str) -> str:
+    """Screen characters for Markdown V2"""
+    text = text.replace('\\', '')
+
+    characters = ['.', '+', '(', ')', '-']
+    for character in characters:
+        text = text.replace(character, f'\{character}')
+    return text
 
 
 def chunks_generators(buttons, chunks_number):
@@ -787,30 +797,34 @@ def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
     for item in items_list:
         item_info = item.split(":")
         item_to_show.append(f'{item_info[1]} ({item_info[0]})')
-    return "\n" + "\n".join(item_to_show)
+    if item_to_show:
+        return "\n  - " + "\n  - ".join(item_to_show)
+    else:
+        return ""
 
 
 def get_player_letter(update, context):
     user_message = update.message.text
     context.user_data["player_letter"] = user_message
     text = f"Ваши данные:\n" \
-           f"Название игры: {context.user_data.get('game_title')}\n" \
-           f"Имя: {context.user_data.get('player_name')}\n" \
-           f"Телефон: {context.user_data.get('player_phone')}\n"
+           f"Название игры: *{context.user_data.get('game_title')}*\n" \
+           f"Имя: *{context.user_data.get('player_name')}*\n" \
+           f"Телефон: *{context.user_data.get('player_phone')}*\n"
     interests = get_interests_for_showing(context)
     if interests:
-        text += f"Интересы: {interests}\n"
+        text += f"Интересы: *{interests}\n*"
     wishlist = get_items_for_showing(context)
     if wishlist:
-        text += f"Подарки: {wishlist}\n"
+        text += f"Подарки: *{wishlist}\n*"
     letter = context.user_data.get('player_letter')
     if letter:
-        text += f"Письмо Санте: {letter}\n"
-    update.message.reply_text(text)
+        text += f"Письмо Санте: *{letter}\n*"
+    update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
     buttons = ["Продолжить", "Вернуться в меню"]
     markup = keyboard_maker(buttons, 2)
-    update.message.reply_text("Если всё верно жмите продолжить",
-                              reply_markup=markup)
+    update.message.reply_text(escape_characters("Если всё верно жмите *Продолжить*"),
+                              reply_markup=markup,
+                              parse_mode=ParseMode.MARKDOWN_V2)
     return REG_PLAYER
 
 
