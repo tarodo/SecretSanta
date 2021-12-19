@@ -16,6 +16,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
 from bot.models import Game, GameUser, Wishlist, Interest
+from test_pair import pairup
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -85,7 +86,7 @@ def send_santa_massage(game_id):
     all_players = []
     for player in players:
         all_players.append(player.td_id)
-    lottery_list = get_created_pair(all_players)
+    lottery_list = pairup(all_players, [])
     for users in lottery_list:
         user_1, user_2 = users
         user_2 = GameUser.objects.get(td_id=user_2)
@@ -132,6 +133,21 @@ def start(update, context):
     return GAME
 
 
+def show_wishlist(player_tg_id: int) -> str:
+    """Generate wishlist of the player. Return formatted string for showing"""
+    try:
+        player: GameUser = GameUser.objects.get(td_id=player_tg_id)
+    except GameUser.DoesNotExist:
+        return ""
+    wishlist = []
+    for item in player.wishlist.all():
+        interest_name = item.interest.name
+        wishlist.append(f'{item.name} : {item.price}р. ({interest_name})')
+    for item in player.wishlist_raw.split("; "):
+        wishlist.append(f"{item}")
+    return "\n".join(wishlist)
+
+
 def show_my_games(user, update):
     games = Game.objects.filter(tg_id_owner=user.id).all()
     _, markup = get_menu(user)
@@ -169,6 +185,7 @@ def show_my_games(user, update):
                                       f"Период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}\n"
                                       f"Дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}\n"
                                       f"Количество игроков: {players_count}\n"
+                                      f"Ваш вишлист:\n{show_wishlist(user.id)}"
                                       )
     return GAME
 
@@ -206,7 +223,7 @@ def change_query_handler(update, context):
         text = "Жеребьёвка проведена, всем участникам игры отправлены сообщения"
         update.effective_user.send_message(text,
                                            reply_markup=ReplyKeyboardRemove())
-
+        return GAME
 
 
 def get_game_new_name(update, context):
@@ -321,6 +338,7 @@ def reg_player(update, context):
         узнаешь имя и контакты своего тайного друга.
         Ему и нужно будет подарить подарок!
         """
+        # TODO: Correct date to date from DB
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
         return GAME
@@ -756,27 +774,6 @@ def get_player_letter(update, context):
     update.message.reply_text("Если всё верно жмите продолжить",
                               reply_markup=markup)
     return REG_PLAYER
-
-
-def reg_player(update, context):
-    user_message = update.message.text
-    if user_message == "Продолжить":
-        user = update.message.from_user
-        save_player(update, context)
-        update.message.reply_text("Превосходно, ты в игре!")
-        text = f"""
-        31.12.2021 мы проведем жеребьевку и ты
-        узнаешь имя и контакты своего тайного друга.
-        Ему и нужно будет подарить подарок!
-        """
-        markup = get_menu(user)[1]
-        update.message.reply_text(text, reply_markup=markup)
-        return GAME
-    elif user_message == "Вернуться в меню":
-        user = update.message.from_user
-        text, markup = get_menu(user)
-        update.message.reply_text(text, reply_markup=markup)
-        return GAME
 
 
 def get_interest_ids(context):
