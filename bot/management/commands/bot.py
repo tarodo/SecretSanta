@@ -3,6 +3,8 @@ import logging
 import os
 import re
 from random import randint
+import random
+from collections import deque
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -16,7 +18,6 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
 from bot.models import Game, GameUser, Wishlist, Interest
-from test_pair import pairup
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -72,12 +73,15 @@ def keyboard_maker(buttons, number):
     return markup
 
 
-def get_created_pair(users):
-    user_pairs=[]
-    for user in range(len(users)):
-        user_pair = users[user], users[(user+1)%(len(users))]
-        user_pairs.append(user_pair)
-    return user_pairs
+def pairup(users, not_user_pairs):
+    random.shuffle(users)
+    partners = deque(users)
+    partners.rotate()
+    new_pairs = list(zip(users, partners))
+    if any(pair in new_pairs for pair in not_user_pairs):
+        return pairup(users, not_user_pairs)
+    else:
+        return new_pairs
 
 
 def send_santa_massage(game_id):
@@ -95,7 +99,7 @@ def send_santa_massage(game_id):
         Спешу сообщить кто тебе выпал {user_2.name}
         Телефон: {user_2.phone}
         Письмо Санте: {user_2.letter}
-        Вишлист:
+        Вишлист:\n{show_wishlist(user_2.td_id)}
         """
         bot.send_message(chat_id=user_1, text=text)
 
