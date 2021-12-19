@@ -161,14 +161,14 @@ def send_santa_massage(game_id):
 
 
 def get_menu(user):
-    text = f"""Привет, {user.first_name}!
-                Организуй тайный обмен подарками, 
-                запусти праздничное настроение!"""
+    text = f"Привет, {user.first_name}!\n" \
+           f"Организуй тайный обмен подарками.\n" \
+           f"Запусти праздничное настроение для своих друзей!"
     buttons = ["Создать игру", "Присоединиться к игре"]
     player = GameUser.objects.filter(td_id=user.id).first()
     game_count = Game.objects.filter(tg_id_owner=user.id).count()
     if player:
-        game_count = player.game.all().count()
+        game_count += player.game.all().count()
     if game_count:
         buttons.append("Мои игры")
     markup = keyboard_maker(buttons, 2)
@@ -322,27 +322,23 @@ def check_code(game_code, update, context):
                                         td_id=update.message.chat_id)
     if game_user:
         update.message.reply_text("Вы уже в игре")
-        text = f"""
-        название игры: {game.name}
-        ограничение стоимости: {game.cost_limit}
-        период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
-        дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
-        """
+        text = f"Название игры: *{game.name}*\n" \
+               f"Ограничение стоимости: *{game.cost_limit}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+               f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
         markup = get_menu(user)[1]
-        update.message.reply_text(text, reply_markup=markup)
+        update.message.reply_text(escape_characters(text), reply_markup=markup, parse_mode=ParseMode.MARKDOWN_V2)
         return GAME
     else:
         context.user_data["game_id"] = game.id
         context.user_data["game_title"] = game.name
         text = "Замечательно, ты собираешься участвовать в игре"
         update.message.reply_text(text)
-        game_description = f"""
-        название игры: {game.name}
-        ограничение стоимости: {game.cost_limit}
-        период регистрации: {game.reg_finish.strftime('%d.%m.%Y')}
-        дата отправки подарков: {game.delivery.strftime('%d.%m.%Y')}
-        """
-        update.message.reply_text(game_description)
+        game_description = f"Название игры: *{game.name}*\n" \
+                           f"Ограничение стоимости: *{game.cost_limit}*\n" \
+                           f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+                           f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
+        update.message.reply_text(escape_characters(game_description), parse_mode=ParseMode.MARKDOWN_V2)
         game_user = GameUser.objects.filter(td_id=update.message.chat_id)
         if game_user:
             user = GameUser.objects.get(td_id=update.message.chat_id)
@@ -384,11 +380,9 @@ def add_user_to_game(update, context):
         game = Game.objects.get(id=int(game_id))
         player.game.add(game)
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"""
-                {game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку и ты
-                узнаешь имя и контакты своего тайного друга.
-                Ему и нужно будет подарить подарок!
-                """
+        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
+               f"И ты узнаешь имя и контакты своего тайного друга.\n" \
+               f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
         return GAME
@@ -407,11 +401,9 @@ def reg_player(update, context):
         game_id = context.user_data.get("game_id")
         game = Game.objects.get(id=int(game_id))
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"""
-        {game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку и ты
-        узнаешь имя и контакты своего тайного друга.
-        Ему и нужно будет подарить подарок!
-        """
+        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
+               f"И ты узнаешь имя и контакты своего тайного друга.\n" \
+               f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
         update.message.reply_text(text, reply_markup=markup)
         return GAME
@@ -515,12 +507,12 @@ def get_gifts_date(update, context):
     context.user_data["gifts_date"] = gifts_date
     if not context.user_data.get("cost_limit"):
         context.user_data["cost"] = "без ограничений"
-    text = f"""Ваша игра:
-               Название: {context.user_data.get("game_title")}
-               Ограничения: {context.user_data.get("cost")} 
-               Дата регистрации: {context.user_data.get("reg_date").strftime('%d.%m.%Y')}
-               Дата отправки подарков: {context.user_data.get("gifts_date").strftime('%d.%m.%Y')}"""
-    update.message.reply_text(text)
+    text = f"Ваша игра:\n" \
+           f"Название: *{context.user_data.get('game_title')}*\n" \
+           f"Ограничения: *{context.user_data.get('cost')}*\n" \
+           f"Дата регистрации: *{context.user_data.get('reg_date').strftime('%d.%m.%Y')}*\n" \
+           f"Дата отправки подарков: *{context.user_data.get('gifts_date').strftime('%d.%m.%Y')}*\n"
+    update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
     buttons = ["Продолжить", "Вернуться в меню"]
     markup = keyboard_maker(buttons, 2)
     update.message.reply_text("Если всё верно жмите продолжить",
@@ -540,11 +532,11 @@ def create_game(update, context):
         update.message.reply_text("Перешлите своим друзьям текст который находится ниже")
         markup = get_menu(user)[1]
         url = deep_link_generator(game_code)
-        text = f"Приглашаю вас присоединиться к игре Тайный Санта. " \
-               f"Приходи на бот @SecretSanta нажимай присоединиться к игре" \
-               f", введи код {game_code}, и следуй инструкции бота\n" \
+        text = f"Приглашаю вас присоединиться к игре Тайный Санта.\n" \
+               f"Приходи на бот *{bot.name}* нажимай *Присоединиться к игре*.\n" \
+               f"Введи код *{game_code}*, и следуй инструкции бота\n" \
                f"Либо воспользуйтесь ссылкой: {url}"
-        update.message.reply_text(text, reply_markup=markup)
+        update.message.reply_text(escape_characters(text), reply_markup=markup, parse_mode=ParseMode.MARKDOWN_V2)
         return GAME
     elif user_message == "Вернуться в меню":
         user = update.message.from_user
@@ -703,7 +695,7 @@ def get_player_interest(update, context):
         return READ_ITEMS
 
 
-def add_item(context, divider: Optional[str] = ":%:"):
+def add_item(context):
     item_name = markdown_save_style(context.user_data.get("current_item_name"))
     item_id = context.user_data.get("current_item_id")
     interest = context.user_data.get("current_interest")
@@ -711,13 +703,13 @@ def add_item(context, divider: Optional[str] = ":%:"):
     if item_name != "":
         if item_id:
             old_ids: str = context.user_data.get("item_ids")
-            if str(item_id) not in old_ids.split(divider):
-                context.user_data['item_ids'] = f"{old_ids}{divider}{item_id}".lstrip(divider)
+            if str(item_id) not in old_ids.split(DIVIDER):
+                context.user_data['item_ids'] = f"{old_ids}{DIVIDER}{item_id}".lstrip(DIVIDER)
             new_item_name = f"{interest}:{item_name}"
         else:
-            new_item_name = f"!!{interest}:{item_name}"
-        if new_item_name not in old_names.split(divider):
-            context.user_data['item_names'] = f"{old_names}{divider}{new_item_name}".lstrip(divider)
+            new_item_name = f"{DIVIDER_NEW}{interest}:{item_name}"
+        if new_item_name not in old_names.split(DIVIDER):
+            context.user_data['item_names'] = f"{old_names}{DIVIDER}{new_item_name}".lstrip(DIVIDER)
 
 
 def item_control(update, context):
@@ -815,19 +807,19 @@ def read_items(update, context):
     return READ_ITEMS
 
 
-def get_interests_for_showing(context, divider: Optional[str] = ":%:") -> str:
+def get_interests_for_showing(context) -> str:
     """Collect interests in one row"""
     interests: str = context.user_data.get("interest_names")
-    return ", ".join(interests.replace("!!", "").split(divider))
+    return ", ".join(interests.replace(f"{DIVIDER_NEW}", "").split(DIVIDER))
 
 
-def get_items_for_showing(context, divider: Optional[str] = ":%:") -> str:
+def get_items_for_showing(context) -> str:
     """Collect items in one row"""
     items: str = context.user_data.get("item_names")
     if items == "":
         return ""
-    items = items.replace("!!", "")
-    items_list = [item for item in items.split(divider)]
+    items = items.replace(f"{DIVIDER_NEW}", "")
+    items_list = [item for item in items.split(DIVIDER)]
     item_to_show = []
     for item in items_list:
         item_info = item.split(":")
@@ -946,9 +938,9 @@ def save_player(update, context):
 def cancel(update, _):
     user = update.message.from_user
     logger.info("Пользователь %s отменил разговор.", user.first_name)
+    text = f"Мое дело предложить - Ваше отказаться\nБудет скучно - пиши."
     update.message.reply_text(
-        'Мое дело предложить - Ваше отказаться'
-        ' Будет скучно - пиши.',
+        text,
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
