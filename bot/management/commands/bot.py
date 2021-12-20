@@ -202,7 +202,8 @@ def start(update, _):
 def show_my_games(user, update):
     games = Game.objects.filter(tg_id_owner=user.id).all()
     _, markup = get_menu(user)
-    update.message.reply_text(f"Вы админите:", reply_markup=markup)
+    if games:
+        update.message.reply_text(f"Вы админите:", reply_markup=markup)
     for game in games:
         keyboard = [
             [
@@ -241,7 +242,8 @@ def show_my_games(user, update):
         if letter:
             f"Письмо Санте: *{letter}*"
         update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
-        update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
+        if player_games:
+            update.message.reply_text(f"Вы участвуете в играх:", reply_markup=markup)
         for game in player_games:
             players_count = game.players.all().count()
             text = f"Игра: *{game.name}*\n" \
