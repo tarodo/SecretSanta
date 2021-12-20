@@ -5,8 +5,8 @@ import re
 from random import randint
 import random
 from collections import deque
-from typing import Optional
 
+import phonenumbers
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardButton, \
     InlineKeyboardMarkup, InputMediaPhoto, ParseMode
@@ -581,18 +581,33 @@ def get_player_name(update, context):
     return PLAYER_PHONE
 
 
-def get_player_phone(update, context):
-    context.user_data["player_phone"] = update.message.contact['phone_number']
+def send_interests_message(update, context):
     interests_buttons = []
     interests = Interest.objects.all()
     for interest in interests:
         interests_buttons.append(interest.name)
-    logger.info(interests)
     context.user_data["interests_buttons"] = interests_buttons
     markup = keyboard_maker(interests_buttons, 2)
     text = "Санта хочет чтобы 🎁 вам понравится. Выбери категорию твоего подарка или напиши её."
     update.message.reply_text(text, reply_markup=markup)
     return PLAYER_INTEREST
+
+
+def get_player_phone(update, context):
+    context.user_data["player_phone"] = update.message.contact['phone_number']
+    return send_interests_message(update, context)
+
+
+def get_player_phone_text(update, context):
+    player_phone = update.message.text
+    new_number = phonenumbers.parse(player_phone, "RU")
+    if phonenumbers.is_valid_number(new_number):
+        context.user_data["player_phone"] = f"+{new_number.country_code}{new_number.national_number}"
+        return send_interests_message(update, context)
+    else:
+        text = f"К сожалению, мы не смогла валидировать ваш номер, попробуйте еще раз"
+        update.effective_user.send_message(text)
+        return PLAYER_PHONE
 
 
 def add_interest(context):
@@ -974,7 +989,7 @@ class Command(BaseCommand):
                 CHECK_CODE: [MessageHandler(Filters.text & ~Filters.command, check_code_handler)],
                 PLAYER_NAME: [MessageHandler(Filters.text & ~Filters.command, get_player_name)],
                 PLAYER_PHONE: [MessageHandler(Filters.contact & ~Filters.command, get_player_phone),
-                               MessageHandler(Filters.text & ~Filters.command, get_player_phone)],
+                               MessageHandler(Filters.text & ~Filters.command, get_player_phone_text)],
                 PLAYER_INTEREST: [MessageHandler(Filters.text & ~Filters.command, get_player_interest)],
                 PLAYER_LETTER: [MessageHandler(Filters.text & ~Filters.command, get_player_letter)],
                 REG_PLAYER: [MessageHandler(Filters.text & ~Filters.command, reg_player)],
@@ -985,7 +1000,8 @@ class Command(BaseCommand):
                 READ_ITEMS: [MessageHandler(Filters.text & ~Filters.command, read_items)],
                 ADD_TO_GAME: [MessageHandler(Filters.text & ~Filters.command, add_user_to_game)],
             },
-            fallbacks=[CommandHandler('cancel', cancel)],
+            fallbacks=[CommandHandler('cancel', cancel),
+                       CommandHandler('start', start)],
         )
 
         dispatcher.add_handler(conv_handler)
