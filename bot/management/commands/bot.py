@@ -17,7 +17,9 @@ from telegram import Bot
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 from django.core.management.base import BaseCommand
 
+from bot.management.commands import telegramcalendar
 from bot.models import Game, GameUser, Wishlist, Interest
+
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -445,20 +447,34 @@ def choose_cost(update, context):
         return COST_LIMIT
     elif user_message == "Нет":
         context.user_data["cost_limit"] = False
-        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
-        update.message.reply_text(text)
-        update.message.reply_text("Например  '25.12.2021'")
-
+        update.message.reply_text(
+            text="Пожалуйста выберите дату регистрации участников: ",
+            reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
 
 
 def get_cost_limit(update, context):
     user_message = update.message.text
     context.user_data["cost"] = user_message
-    text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
-    update.message.reply_text(text)
-    update.message.reply_text("Например  '25.12.2021'")
+    update.message.reply_text(text="Пожалуйста выберите дату регистрации участников: ",
+                              reply_markup=telegramcalendar.create_calendar())
     return REG_DATE
+
+
+def calendar_handler(update, context):
+    query = update.callback_query
+    (kind, _, _, _, _) = telegramcalendar.separate_callback_data(query.data)
+    selected, date = telegramcalendar.process_calendar_selection(update,
+                                                                 context)
+    selected_date = date.strftime("%d.%m.%Y")
+    buttons = [f"{selected_date}"]
+    markup = keyboard_maker(buttons, 2)
+    text = f"Вы выбрали {selected_date} Нажмите на кнопку для подтверждения"
+    update.effective_user.send_message(text, reply_markup=markup)
+    if not context.user_data.get('calendar'):
+        return REG_DATE
+    else:
+        return GIFTS_DATE
 
 
 def get_reg_date(update, context):
@@ -467,21 +483,22 @@ def get_reg_date(update, context):
         reg_date = datetime.datetime.strptime(f"{user_message}", "%d.%m.%Y").date()
     except ValueError:
         update.message.reply_text("Введена не корректная дата.")
-        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
-        update.message.reply_text(text)
-        update.message.reply_text("Например  '25.12.2021'")
+        update.message.reply_text(
+            text="Пожалуйста выберите дату регистрации участников: ",
+            reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
     if reg_date <= datetime.date.today():
-        text = "У Санты сломалась машина времени 😭, пожалуйста дату из будущего😁"
+        text = "У Санты сломалась машина времени 😭, пожалуйста выберите дату из будущего😁"
         update.message.reply_text(text)
-        text = "Введите период регистрации участников, в формате 'дд. мм. гггг'"
-        update.message.reply_text(text)
-        update.message.reply_text("Например  '25.12.2021'")
+        update.message.reply_text(
+            text="Пожалуйста выберите дату регистрации участников: ",
+            reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
     context.user_data["reg_date"] = reg_date
-    text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
-    update.message.reply_text(text)
-    update.message.reply_text("Например  '31.12.2021'")
+    context.user_data["calendar"] = True
+    update.message.reply_text(
+        text="Пожалуйста выберите дату отправки подарка: ",
+        reply_markup=telegramcalendar.create_calendar())
     return GIFTS_DATE
 
 
@@ -492,19 +509,20 @@ def get_gifts_date(update, context):
                                                 "%d.%m.%Y").date()
     except ValueError:
         update.message.reply_text("Введена не корректная дата.")
-        text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
-        update.message.reply_text(text)
-        update.message.reply_text("Например  '31.12.2021'")
+        update.message.reply_text(
+            text="Пожалуйста выберите дату отправки подарка: ",
+            reply_markup=telegramcalendar.create_calendar())
         return GIFTS_DATE
     if gifts_date <= context.user_data.get("reg_date"):
         update.message.reply_text("Введена не корректная дата.")
         text = "Она должна быть позже даты регистрации"
         update.message.reply_text(text)
-        text = "Введите дата отправки подарка, в формате 'дд. мм. гггг'"
-        update.message.reply_text(text)
-        update.message.reply_text("Например  '31.12.2021'")
+        update.message.reply_text(
+            text="Пожалуйста выберите дату отправки подарка: ",
+            reply_markup=telegramcalendar.create_calendar())
         return GIFTS_DATE
     context.user_data["gifts_date"] = gifts_date
+    context.user_data["calendar"] = False
     if not context.user_data.get("cost_limit"):
         context.user_data["cost"] = "без ограничений"
     text = f"Ваша игра:\n" \
@@ -983,8 +1001,14 @@ class Command(BaseCommand):
                 GAME_TITLE: [MessageHandler(Filters.text & ~Filters.command, get_game_title)],
                 COST: [MessageHandler(Filters.text & ~Filters.command, choose_cost)],
                 COST_LIMIT: [MessageHandler(Filters.text & ~Filters.command, get_cost_limit)],
-                REG_DATE: [MessageHandler(Filters.text & ~Filters.command, get_reg_date)],
-                GIFTS_DATE: [MessageHandler(Filters.text & ~Filters.command, get_gifts_date)],
+                REG_DATE: [
+                    MessageHandler(Filters.text & ~Filters.command, get_reg_date),
+                    CallbackQueryHandler(calendar_handler)
+                ],
+                GIFTS_DATE: [
+                    MessageHandler(Filters.text & ~Filters.command, get_gifts_date),
+                    CallbackQueryHandler(calendar_handler)
+                ],
                 CREATE_GAME: [MessageHandler(Filters.text & ~Filters.command, create_game)],
                 CHECK_CODE: [MessageHandler(Filters.text & ~Filters.command, check_code_handler)],
                 PLAYER_NAME: [MessageHandler(Filters.text & ~Filters.command, get_player_name)],
