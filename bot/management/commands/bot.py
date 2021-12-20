@@ -2,11 +2,14 @@ import datetime
 import logging
 import os
 import re
+import time
 from random import randint
 import random
 from collections import deque
+import threading
 
 import phonenumbers
+import pytz
 from dotenv import load_dotenv
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton, InlineKeyboardButton, \
     InlineKeyboardMarkup, InputMediaPhoto, ParseMode
@@ -567,11 +570,11 @@ def save_game(update, context):
     user = update.message.from_user
     new_reg_finish = datetime.datetime.combine(
         context.user_data.get("reg_date"),
-        datetime.time(12, 0, 0)
+        datetime.time(9, 0, 0, tzinfo=pytz.UTC)
     )
     new_delivery = datetime.datetime.combine(
         context.user_data.get("gifts_date"),
-        datetime.time(12, 0, 0)
+        datetime.time(9, 0, 0, tzinfo=pytz.UTC)
     )
     game_params = {
         "game_title": context.user_data.get("game_title"),
@@ -984,57 +987,74 @@ def cancel(update, _):
     return ConversationHandler.END
 
 
+def bot_starting():
+    updater = Updater(token=TELEGRAM_TOKEN)
+    dispatcher = updater.dispatcher
+
+    conv_handler = ConversationHandler(
+        entry_points=[
+            CommandHandler('start', start_code, Filters.regex(r'\d+')),
+            CommandHandler('start', start)
+        ],
+        states={
+            GAME: [
+                MessageHandler(Filters.text & ~Filters.command, choose_game),
+                CallbackQueryHandler(change_query_handler, pattern='^game:')
+            ],
+            GAME_CHANGE_NAME: [MessageHandler(Filters.text & ~Filters.command, get_game_new_name)],
+            GAME_TITLE: [MessageHandler(Filters.text & ~Filters.command, get_game_title)],
+            COST: [MessageHandler(Filters.text & ~Filters.command, choose_cost)],
+            COST_LIMIT: [MessageHandler(Filters.text & ~Filters.command, get_cost_limit)],
+            REG_DATE: [
+                MessageHandler(Filters.text & ~Filters.command, get_reg_date),
+                CallbackQueryHandler(calendar_handler)
+            ],
+            GIFTS_DATE: [
+                MessageHandler(Filters.text & ~Filters.command, get_gifts_date),
+                CallbackQueryHandler(calendar_handler)
+            ],
+            CREATE_GAME: [MessageHandler(Filters.text & ~Filters.command, create_game)],
+            CHECK_CODE: [MessageHandler(Filters.text & ~Filters.command, check_code_handler)],
+            PLAYER_NAME: [MessageHandler(Filters.text & ~Filters.command, get_player_name)],
+            PLAYER_PHONE: [MessageHandler(Filters.contact & ~Filters.command, get_player_phone),
+                           MessageHandler(Filters.text & ~Filters.command, get_player_phone_text)],
+            PLAYER_INTEREST: [MessageHandler(Filters.text & ~Filters.command, get_player_interest)],
+            PLAYER_LETTER: [MessageHandler(Filters.text & ~Filters.command, get_player_letter)],
+            REG_PLAYER: [MessageHandler(Filters.text & ~Filters.command, reg_player)],
+            SHOW_ITEMS: [
+                MessageHandler(Filters.text & ~Filters.command, show_items),
+                CallbackQueryHandler(item_control, pattern='^item:')
+            ],
+            READ_ITEMS: [MessageHandler(Filters.text & ~Filters.command, read_items)],
+            ADD_TO_GAME: [MessageHandler(Filters.text & ~Filters.command, add_user_to_game)],
+        },
+        fallbacks=[CommandHandler('cancel', cancel),
+                   CommandHandler('start', start_code, Filters.regex(r'\d+')),
+                   CommandHandler('start', start)],
+    )
+
+    dispatcher.add_handler(conv_handler)
+
+    updater.start_polling()
+
+
+def santa_message_checker():
+    while True:
+        games = Game.objects.all()
+        for game in games:
+            game_reg_datetime = game.reg_finish.astimezone(pytz.timezone("Europe/Moscow"))
+            now_datetime = datetime.datetime.now(pytz.timezone("Europe/Moscow"))
+            logger.info(f'{game.name} :: '
+                        f'До жеребьевки {(game_reg_datetime - now_datetime).total_seconds()//60} минут')
+            if game.reg_finish <= now_datetime:
+                send_santa_massage(game.id)
+        time.sleep(600)
+
+
 class Command(BaseCommand):
     """Start the bot."""
     help = "Телеграм-бот"
 
     def handle(self, *args, **options):
-        updater = Updater(token=TELEGRAM_TOKEN)
-        dispatcher = updater.dispatcher
-
-        conv_handler = ConversationHandler(
-            entry_points=[
-                CommandHandler('start', start_code, Filters.regex(r'\d+')),
-                CommandHandler('start', start)
-            ],
-            states={
-                GAME: [
-                    MessageHandler(Filters.text & ~Filters.command, choose_game),
-                    CallbackQueryHandler(change_query_handler, pattern='^game:')
-                ],
-                GAME_CHANGE_NAME: [MessageHandler(Filters.text & ~Filters.command, get_game_new_name)],
-                GAME_TITLE: [MessageHandler(Filters.text & ~Filters.command, get_game_title)],
-                COST: [MessageHandler(Filters.text & ~Filters.command, choose_cost)],
-                COST_LIMIT: [MessageHandler(Filters.text & ~Filters.command, get_cost_limit)],
-                REG_DATE: [
-                    MessageHandler(Filters.text & ~Filters.command, get_reg_date),
-                    CallbackQueryHandler(calendar_handler)
-                ],
-                GIFTS_DATE: [
-                    MessageHandler(Filters.text & ~Filters.command, get_gifts_date),
-                    CallbackQueryHandler(calendar_handler)
-                ],
-                CREATE_GAME: [MessageHandler(Filters.text & ~Filters.command, create_game)],
-                CHECK_CODE: [MessageHandler(Filters.text & ~Filters.command, check_code_handler)],
-                PLAYER_NAME: [MessageHandler(Filters.text & ~Filters.command, get_player_name)],
-                PLAYER_PHONE: [MessageHandler(Filters.contact & ~Filters.command, get_player_phone),
-                               MessageHandler(Filters.text & ~Filters.command, get_player_phone_text)],
-                PLAYER_INTEREST: [MessageHandler(Filters.text & ~Filters.command, get_player_interest)],
-                PLAYER_LETTER: [MessageHandler(Filters.text & ~Filters.command, get_player_letter)],
-                REG_PLAYER: [MessageHandler(Filters.text & ~Filters.command, reg_player)],
-                SHOW_ITEMS: [
-                    MessageHandler(Filters.text & ~Filters.command, show_items),
-                    CallbackQueryHandler(item_control, pattern='^item:')
-                ],
-                READ_ITEMS: [MessageHandler(Filters.text & ~Filters.command, read_items)],
-                ADD_TO_GAME: [MessageHandler(Filters.text & ~Filters.command, add_user_to_game)],
-            },
-            fallbacks=[CommandHandler('cancel', cancel),
-                       CommandHandler('start', start_code, Filters.regex(r'\d+')),
-                       CommandHandler('start', start)],
-        )
-
-        dispatcher.add_handler(conv_handler)
-
-        updater.start_polling()
-        updater.idle()
+        threading.Thread(target=bot_starting).start()
+        threading.Thread(target=santa_message_checker).start()
