@@ -213,7 +213,7 @@ def show_my_games(user, update):
         players_count = game.players.all().count()
         text = f"Игра: *{game.name}*\n" \
                f"Ограничение стоимости: *{game.cost_limit}*\n" \
-               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
                f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
                f"Количество игроков: *{players_count}*\n" \
                f"Ссылка для приглашений: {markdown_save_style(deep_link_generator(game.code))}"
@@ -241,7 +241,7 @@ def show_my_games(user, update):
             players_count = game.players.all().count()
             text = f"Игра: *{game.name}*\n" \
                    f"Ограничение стоимости: *{game.cost_limit}*\n" \
-                   f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+                   f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
                    f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
                    f"Количество игроков: *{players_count}*"
             update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
@@ -325,7 +325,7 @@ def check_code(game_code, update, context):
         update.message.reply_text("Вы уже в игре")
         text = f"Название игры: *{game.name}*\n" \
                f"Ограничение стоимости: *{game.cost_limit}*\n" \
-               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
                f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
         markup = get_menu(user)[1]
         update.message.reply_text(escape_characters(text), reply_markup=markup, parse_mode=ParseMode.MARKDOWN_V2)
@@ -337,7 +337,7 @@ def check_code(game_code, update, context):
         update.message.reply_text(text)
         game_description = f"Название игры: *{game.name}*\n" \
                            f"Ограничение стоимости: *{game.cost_limit}*\n" \
-                           f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
+                           f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
                            f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
         update.message.reply_text(escape_characters(game_description), parse_mode=ParseMode.MARKDOWN_V2)
         game_user = GameUser.objects.filter(td_id=update.message.chat_id)
@@ -381,7 +381,7 @@ def add_user_to_game(update, context):
         game = Game.objects.get(id=int(game_id))
         player.game.add(game)
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
+        text = f"{game.reg_finish.strftime('%d.%m.%Y %H:%M')} мы проведем жеребьевку\n" \
                f"И ты узнаешь имя и контакты своего тайного друга.\n" \
                f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
@@ -402,7 +402,7 @@ def reg_player(update, context):
         game_id = context.user_data.get("game_id")
         game = Game.objects.get(id=int(game_id))
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
+        text = f"{game.reg_finish.strftime('%d.%m.%Y %H:%M')} мы проведем жеребьевку\n" \
                f"И ты узнаешь имя и контакты своего тайного друга.\n" \
                f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
@@ -565,12 +565,20 @@ def create_game(update, context):
 
 def save_game(update, context):
     user = update.message.from_user
+    new_reg_finish = datetime.datetime.combine(
+        context.user_data.get("reg_date"),
+        datetime.time(12, 0, 0)
+    )
+    new_delivery = datetime.datetime.combine(
+        context.user_data.get("gifts_date"),
+        datetime.time(12, 0, 0)
+    )
     game_params = {
         "game_title": context.user_data.get("game_title"),
         "cost_limit": context.user_data.get("cost_limit"),
         "cost": context.user_data.get("cost"),
-        "reg_date": context.user_data.get("reg_date"),
-        "gifts_date": context.user_data.get("gifts_date"),
+        "reg_date": new_reg_finish,
+        "gifts_date": new_delivery,
         "game_code": context.user_data.get("game_code"),
         "chat-id": update.message.chat_id,
         "user_name": user.username
@@ -581,7 +589,7 @@ def save_game(update, context):
         code=game_params["game_code"],
         tg_id_owner=game_params["chat-id"],
         cost_limit=game_params["cost"],
-        reg_finish=game_params['reg_date'],
+        reg_finish=new_reg_finish,
         delivery=game_params["gifts_date"],
     )
     context.user_data["game_params"] = game_params
