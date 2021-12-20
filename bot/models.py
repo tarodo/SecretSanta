@@ -9,6 +9,7 @@ class Game(models.Model):
     tg_id_owner = models.PositiveBigIntegerField("ID владельца", blank=True, null=True)
     cost_limit = models.CharField("Лимит на стоимость", blank=True, max_length=40)
     reg_finish = models.DateTimeField("Дата окончания регистраций")
+    lottery_date = models.DateTimeField("Дата проведения лотереи", blank=True, null=True)
     delivery = models.DateTimeField("Дата отправления подарка")
     created_at = models.DateTimeField("Когда создана игра", default=timezone.now)
 

@@ -162,6 +162,8 @@ def send_santa_massage(game_id):
         if letter:
             f"Письмо Санте: *{letter}*"
         bot.send_message(chat_id=user_1, text=escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
+    game.lottery_date = datetime.datetime.now(pytz.UTC)
+    game.save()
 
 
 def get_menu(user):
@@ -216,7 +218,7 @@ def show_my_games(user, update):
         players_count = game.players.all().count()
         text = f"Игра: *{game.name}*\n" \
                f"Ограничение стоимости: *{game.cost_limit}*\n" \
-               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
                f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
                f"Количество игроков: *{players_count}*\n" \
                f"Ссылка для приглашений: {markdown_save_style(deep_link_generator(game.code))}"
@@ -244,7 +246,7 @@ def show_my_games(user, update):
             players_count = game.players.all().count()
             text = f"Игра: *{game.name}*\n" \
                    f"Ограничение стоимости: *{game.cost_limit}*\n" \
-                   f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
+                   f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
                    f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*\n" \
                    f"Количество игроков: *{players_count}*"
             update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
@@ -328,7 +330,7 @@ def check_code(game_code, update, context):
         update.message.reply_text("Вы уже в игре")
         text = f"Название игры: *{game.name}*\n" \
                f"Ограничение стоимости: *{game.cost_limit}*\n" \
-               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
+               f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
                f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
         markup = get_menu(user)[1]
         update.message.reply_text(escape_characters(text), reply_markup=markup, parse_mode=ParseMode.MARKDOWN_V2)
@@ -340,7 +342,7 @@ def check_code(game_code, update, context):
         update.message.reply_text(text)
         game_description = f"Название игры: *{game.name}*\n" \
                            f"Ограничение стоимости: *{game.cost_limit}*\n" \
-                           f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y %H:%M')}*\n" \
+                           f"Период регистрации: *{game.reg_finish.strftime('%d.%m.%Y')}*\n" \
                            f"Дата отправки подарков: *{game.delivery.strftime('%d.%m.%Y')}*"
         update.message.reply_text(escape_characters(game_description), parse_mode=ParseMode.MARKDOWN_V2)
         game_user = GameUser.objects.filter(td_id=update.message.chat_id)
@@ -384,7 +386,7 @@ def add_user_to_game(update, context):
         game = Game.objects.get(id=int(game_id))
         player.game.add(game)
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"{game.reg_finish.strftime('%d.%m.%Y %H:%M')} мы проведем жеребьевку\n" \
+        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
                f"И ты узнаешь имя и контакты своего тайного друга.\n" \
                f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
@@ -405,7 +407,7 @@ def reg_player(update, context):
         game_id = context.user_data.get("game_id")
         game = Game.objects.get(id=int(game_id))
         update.message.reply_text("Превосходно, ты в игре!")
-        text = f"{game.reg_finish.strftime('%d.%m.%Y %H:%M')} мы проведем жеребьевку\n" \
+        text = f"{game.reg_finish.strftime('%d.%m.%Y')} мы проведем жеребьевку\n" \
                f"И ты узнаешь имя и контакты своего тайного друга.\n" \
                f"Ему и нужно будет подарить подарок!"
         markup = get_menu(user)[1]
@@ -1042,12 +1044,17 @@ def santa_message_checker():
     while True:
         games = Game.objects.all()
         for game in games:
-            game_reg_datetime = game.reg_finish.astimezone(pytz.timezone("Europe/Moscow"))
             now_datetime = datetime.datetime.now(pytz.timezone("Europe/Moscow"))
-            logger.info(f'{game.name} :: '
-                        f'До жеребьевки {(game_reg_datetime - now_datetime).total_seconds()//60} минут')
-            if game.reg_finish <= now_datetime:
-                send_santa_massage(game.id)
+            game_reg_datetime = game.reg_finish.astimezone(pytz.timezone("Europe/Moscow"))
+            if game.lottery_date:
+                game_lottery_date = game.lottery_date.astimezone(pytz.timezone("Europe/Moscow"))
+                logger.info(f'{game.name} :: '
+                            f'Жеребьевка прошла {(now_datetime - game_lottery_date).total_seconds()//60} минут назад')
+            else:
+                logger.info(f'{game.name} :: '
+                            f'До жеребьевки {(game_reg_datetime - now_datetime).total_seconds() // 60} минут')
+                if game_reg_datetime <= now_datetime:
+                    send_santa_massage(game.id)
         time.sleep(600)
 
 
