@@ -551,7 +551,7 @@ def create_game(update, context):
         markup = get_menu(user)[1]
         url = deep_link_generator(game_code)
         text = f"Приглашаю вас присоединиться к игре Тайный Санта.\n" \
-               f"Приходи на бот *{bot.name}* нажимай *Присоединиться к игре*.\n" \
+               f"Приходи на бот @*{bot.name}* нажимай *Присоединиться к игре*.\n" \
                f"Введи код *{game_code}*, и следуй инструкции бота\n" \
                f"Либо воспользуйтесь ссылкой: {url}"
         update.message.reply_text(escape_characters(text), reply_markup=markup, parse_mode=ParseMode.MARKDOWN_V2)
@@ -566,14 +566,14 @@ def create_game(update, context):
 def save_game(update, context):
     user = update.message.from_user
     game_params = {
-        "game_title": context.user_data.get("game_title"),  # str
-        "cost_limit": context.user_data.get("cost_limit"),  # bool
-        "cost": context.user_data.get("cost"),  # str
+        "game_title": context.user_data.get("game_title"),
+        "cost_limit": context.user_data.get("cost_limit"),
+        "cost": context.user_data.get("cost"),
         "reg_date": context.user_data.get("reg_date"),
         "gifts_date": context.user_data.get("gifts_date"),
-        "game_code": context.user_data.get("game_code"),  # int
-        "chat-id": update.message.chat_id,  # int
-        "user_name": user.username  # str
+        "game_code": context.user_data.get("game_code"),
+        "chat-id": update.message.chat_id,
+        "user_name": user.username
     }
     logger.info(f'{game_params=}')
     Game.objects.create(
