@@ -464,9 +464,8 @@ def provide_reg_date(new_date, update, context):
     try:
         reg_date = datetime.datetime.strptime(f"{new_date}", "%d.%m.%Y").date()
     except ValueError:
-        update.effective_user.send_message("Введена не корректная дата.")
         update.effective_user.send_message(
-            text="Пожалуйста выберите дату регистрации участников: ",
+            text="Введена не корректная дата.\nПожалуйста выберите дату регистрации участников: ",
             reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
     if reg_date <= datetime.date.today():
@@ -489,14 +488,12 @@ def provide_gift_date(new_date, update, context):
         gifts_date = datetime.datetime.strptime(f"{new_date}",
                                                 "%d.%m.%Y").date()
     except ValueError:
-        update.effective_user.send_message("Введена не корректная дата.")
         update.effective_user.send_message(
-            text="Пожалуйста выберите дату отправки подарка: ",
+            text="Введена не корректная дата.\nПожалуйста выберите дату отправки подарка: ",
             reply_markup=telegramcalendar.create_calendar())
         return GIFTS_DATE
     if gifts_date <= context.user_data.get("reg_date"):
-        update.effective_user.send_message("Введена не корректная дата.")
-        text = "Она должна быть позже даты регистрации"
+        text = "Введена не корректная дата.\nОна должна быть позже даты регистрации"
         update.effective_user.send_message(text)
         update.effective_user.send_message(
             text="Пожалуйста выберите дату отправки подарка: ",
@@ -653,7 +650,6 @@ def add_interest(context):
 
 
 def show_one_item(user_message, update, context, query=None):
-    logger.info(f'{user_message=}')
     category = context.user_data.get("current_interest")
     cost_low, cost_high = get_costs(context)
     items = Wishlist.objects.filter(interest__name=category).order_by("id").all()
@@ -761,9 +757,7 @@ def item_control(update, context):
 def get_costs(context):
     game = Game.objects.get(id=context.user_data.get("game_id"))
     cost_limit = game.cost_limit
-    logger.info(f'{cost_limit=}')
     costs = re.findall(r"\d+", cost_limit)
-    logger.info(f'{costs=}')
     if len(costs) == 2:
         return costs[0], costs[1]
     elif len(costs) == 1 and 'от' in cost_limit:
