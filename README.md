@@ -1,5 +1,5 @@
 # Secret Santa
-
+Бот для проведения игры “Тайный Санта”.
 ## Setup
 1. Создать файл `.env` из `.env.Exmaple`
 2. `pip install -r requirements.txt`
