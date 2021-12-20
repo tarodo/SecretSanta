@@ -20,7 +20,6 @@ from django.core.management.base import BaseCommand
 from bot.management.commands import telegramcalendar
 from bot.models import Game, GameUser, Wishlist, Interest
 
-
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 
@@ -461,63 +460,45 @@ def get_cost_limit(update, context):
     return REG_DATE
 
 
-def calendar_handler(update, context):
-    query = update.callback_query
-    (kind, _, _, _, _) = telegramcalendar.separate_callback_data(query.data)
-    selected, date = telegramcalendar.process_calendar_selection(update,
-                                                                 context)
-    selected_date = date.strftime("%d.%m.%Y")
-    buttons = [f"{selected_date}"]
-    markup = keyboard_maker(buttons, 2)
-    text = f"Вы выбрали {selected_date} Нажмите на кнопку для подтверждения"
-    update.effective_user.send_message(text, reply_markup=markup)
-    if not context.user_data.get('calendar'):
-        return REG_DATE
-    else:
-        return GIFTS_DATE
-
-
-def get_reg_date(update, context):
-    user_message = update.message.text
+def provide_reg_date(new_date, update, context):
     try:
-        reg_date = datetime.datetime.strptime(f"{user_message}", "%d.%m.%Y").date()
+        reg_date = datetime.datetime.strptime(f"{new_date}", "%d.%m.%Y").date()
     except ValueError:
-        update.message.reply_text("Введена не корректная дата.")
-        update.message.reply_text(
+        update.effective_user.send_message("Введена не корректная дата.")
+        update.effective_user.send_message(
             text="Пожалуйста выберите дату регистрации участников: ",
             reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
     if reg_date <= datetime.date.today():
         text = "У Санты сломалась машина времени 😭, пожалуйста выберите дату из будущего😁"
-        update.message.reply_text(text)
-        update.message.reply_text(
+        update.effective_user.send_message(text)
+        update.effective_user.send_message(
             text="Пожалуйста выберите дату регистрации участников: ",
             reply_markup=telegramcalendar.create_calendar())
         return REG_DATE
     context.user_data["reg_date"] = reg_date
     context.user_data["calendar"] = True
-    update.message.reply_text(
+    update.effective_user.send_message(
         text="Пожалуйста выберите дату отправки подарка: ",
         reply_markup=telegramcalendar.create_calendar())
     return GIFTS_DATE
 
 
-def get_gifts_date(update, context):
-    user_message = update.message.text
+def provide_gift_date(new_date, update, context):
     try:
-        gifts_date = datetime.datetime.strptime(f"{user_message}",
+        gifts_date = datetime.datetime.strptime(f"{new_date}",
                                                 "%d.%m.%Y").date()
     except ValueError:
-        update.message.reply_text("Введена не корректная дата.")
-        update.message.reply_text(
+        update.effective_user.send_message("Введена не корректная дата.")
+        update.effective_user.send_message(
             text="Пожалуйста выберите дату отправки подарка: ",
             reply_markup=telegramcalendar.create_calendar())
         return GIFTS_DATE
     if gifts_date <= context.user_data.get("reg_date"):
-        update.message.reply_text("Введена не корректная дата.")
+        update.effective_user.send_message("Введена не корректная дата.")
         text = "Она должна быть позже даты регистрации"
-        update.message.reply_text(text)
-        update.message.reply_text(
+        update.effective_user.send_message(text)
+        update.effective_user.send_message(
             text="Пожалуйста выберите дату отправки подарка: ",
             reply_markup=telegramcalendar.create_calendar())
         return GIFTS_DATE
@@ -530,12 +511,34 @@ def get_gifts_date(update, context):
            f"Ограничения: *{context.user_data.get('cost')}*\n" \
            f"Дата регистрации: *{context.user_data.get('reg_date').strftime('%d.%m.%Y')}*\n" \
            f"Дата отправки подарков: *{context.user_data.get('gifts_date').strftime('%d.%m.%Y')}*\n"
-    update.message.reply_text(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
+    update.effective_user.send_message(escape_characters(text), parse_mode=ParseMode.MARKDOWN_V2)
     buttons = ["Продолжить", "Вернуться в меню"]
     markup = keyboard_maker(buttons, 2)
-    update.message.reply_text("Если всё верно жмите продолжить",
-                              reply_markup=markup)
+    update.effective_user.send_message("Если всё верно жмите продолжить",
+                                       reply_markup=markup)
     return CREATE_GAME
+
+
+def calendar_handler(update, context):
+    query = update.callback_query
+    (kind, _, _, _, _) = telegramcalendar.separate_callback_data(query.data)
+    selected, date = telegramcalendar.process_calendar_selection(update,
+                                                                 context)
+    selected_date = date.strftime("%d.%m.%Y")
+    if not context.user_data.get('calendar'):
+        return provide_reg_date(selected_date, update, context)
+    else:
+        return provide_gift_date(selected_date, update, context)
+
+
+def get_reg_date(update, context):
+    user_message = update.message.text
+    return provide_reg_date(user_message, update, context)
+
+
+def get_gifts_date(update, context):
+    user_message = update.message.text
+    return provide_reg_date(user_message, update, context)
 
 
 def create_game(update, context):
@@ -1025,6 +1028,7 @@ class Command(BaseCommand):
                 ADD_TO_GAME: [MessageHandler(Filters.text & ~Filters.command, add_user_to_game)],
             },
             fallbacks=[CommandHandler('cancel', cancel),
+                       CommandHandler('start', start_code, Filters.regex(r'\d+')),
                        CommandHandler('start', start)],
         )
 
